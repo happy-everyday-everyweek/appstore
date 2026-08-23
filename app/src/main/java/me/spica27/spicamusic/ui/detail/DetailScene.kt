@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
@@ -26,6 +27,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.spica27.navkit.path.LocalNavigationPath
 import me.spica27.navkit.scene.StackScene
 import me.spica27.spicamusic.R
@@ -42,6 +46,8 @@ import me.spica27.spicamusic.ui.components.AppIcon
 import me.spica27.spicamusic.ui.components.OpenSourceTag
 import me.spica27.spicamusic.ui.components.TagChip
 import me.spica27.spicamusic.ui.components.gradeColors
+import me.spica27.spicamusic.ui.home.StoreViewModel
+import org.koin.compose.viewmodel.koinActivityViewModel
 
 /**
  * 应用详情页
@@ -61,12 +67,24 @@ class DetailScene(
 fun DetailScreen(app: AppMeta) {
     val path = LocalNavigationPath.current
     val context = LocalContext.current
+    val viewModel: StoreViewModel = koinActivityViewModel()
+
+    // 下载结果提示（一次性消费）
+    val lastDownload by viewModel.lastDownload.collectAsStateWithLifecycle()
+    LaunchedEffect(lastDownload) {
+        lastDownload?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.consumeDownloadMessage { }
+        }
+    }
+    // 上游应用（upstream 指向的系统 ID 解析）
+    val upstreamApp = app.upstreamId?.let { viewModel.appById(it) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景：图标模糊铺底
-        if (app.iconUrl.isNotBlank()) {
+        if (app.icon.isNotBlank()) {
             me.spica27.spicamusic.ui.components
-                .StoreAsyncIconBackground(url = app.iconUrl)
+                .StoreAsyncIconBackground(url = app.icon)
         }
         Box(
             modifier =
@@ -143,7 +161,7 @@ fun DetailScreen(app: AppMeta) {
                     contentColor = Color.White,
                 )
                 Spacer(modifier = Modifier.size(8.dp))
-                OpenSourceTag(isOpenSource = app.isOpenSource)
+                OpenSourceTag(isOpenSource = app.openSource)
                 app.specialPermissions.forEach { perm ->
                     Spacer(modifier = Modifier.size(8.dp))
                     TagChip(
@@ -154,39 +172,83 @@ fun DetailScreen(app: AppMeta) {
                 }
             }
 
+            // 来源仓库
+            if (app.repo.isNotBlank()) {
+                Text(
+                    text =
+                        "${app.repo} · ${app.license ?: "无 License"}" +
+                            if (app.version.releaseTag.isNotBlank()) " · ${app.version.releaseTag}" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
+                )
+            }
+
+            // 上游应用入口（upstream）
+            if (upstreamApp != null) {
+                Surface(
+                    onClick = { path.push(DetailScene(upstreamApp)) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Color.White.copy(alpha = 0.14f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        AppIcon(app = upstreamApp, size = 40.dp)
+                        Column(
+                            modifier = Modifier.weight(1f).padding(start = 12.dp),
+                        ) {
+                            Text(
+                                text = "上游应用",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.7f),
+                            )
+                            Text(
+                                text = upstreamApp.name.ifBlank { upstreamApp.packageName },
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White,
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = Color.White,
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
 
             // 介绍（README）
             SectionCard(title = stringResource(R.string.detail_readme)) {
-                val readme = app.readmeText
-                if (readme.isNullOrBlank()) {
-                    Text(
-                        text = stringResource(R.string.no_readme),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Text(
-                        text = readme,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+                Text(
+                    text =
+                        buildString {
+                            append("README 已随应用收录并存档于承载仓库；全文可前往开发者仓库查看：\n")
+                            append("github.com/").append(app.repo.ifBlank { "（仓库信息同步中）" })
+                        },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
 
-            // 权限列表
+            // 权限区：最低特殊权限标签 + 说明（完整权限清单随 APK 核验，见聚合包核验记录）
             SectionCard(title = stringResource(R.string.detail_permissions)) {
-                if (app.permissions.isEmpty()) {
+                if (app.specialPermissions.isEmpty()) {
                     Text(
-                        text = "无权限声明",
+                        text = "无特殊权限（none）",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        app.permissions.forEach { permission ->
+                        app.specialPermissions.forEach { perm ->
                             Text(
-                                text = "• $permission",
+                                text = "• ${perm.label}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
@@ -198,13 +260,9 @@ fun DetailScreen(app: AppMeta) {
             Spacer(modifier = Modifier.height(96.dp))
         }
 
-        // 悬浮下载按钮
+        // 悬浮下载按钮（经 GitLink 下载底座直连开发者 Release）
         ExtendedFloatingActionButton(
-            onClick = {
-                Toast
-                    .makeText(context, R.string.download_coming_soon, Toast.LENGTH_SHORT)
-                    .show()
-            },
+            onClick = { viewModel.downloadApk(context, app) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
             containerColor = MaterialTheme.colorScheme.tertiary,
             contentColor = MaterialTheme.colorScheme.onTertiary,

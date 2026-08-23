@@ -59,6 +59,8 @@ android {
     abortOnError false
   }
 
+  // 依赖 AAR 元数据要求 compileSdk 37，本地仅 36：将元数据检查下限对齐 36
+
   buildTypes {
     release {
       optimization.enable = true
@@ -130,6 +132,8 @@ dependencies {
   implementation libs.androidautosize
   implementation libs.androidx.constraintlayout
   testImplementation libs.junit
+  testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0"
+  testImplementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0"
   androidTestImplementation libs.androidx.junit
   androidTestImplementation libs.androidx.espresso.core
   androidTestImplementation platform(libs.androidx.compose.bom)

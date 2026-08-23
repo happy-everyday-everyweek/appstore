@@ -35,24 +35,26 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.spica27.navkit.path.LocalNavigationPath
 import me.spica27.navkit.scene.StackScene
 import me.spica27.spicamusic.R
 import me.spica27.spicamusic.common.entity.appstore.AppMeta
 import me.spica27.spicamusic.ui.components.AppRow
 import me.spica27.spicamusic.ui.detail.DetailScene
+import me.spica27.spicamusic.ui.home.StoreViewModel
+import org.koin.compose.viewmodel.koinActivityViewModel
 
 /**
- * 搜索页：顶部搜索框 + 结果列表。
- * 数据层接入后按关键字过滤应用列表。
+ * 搜索页：顶部搜索框 + 实时结果列表（按名称/包名/简介/仓库匹配聚合包数据）。
  */
 class SearchScene : StackScene() {
     @Composable
     override fun Content() {
         val path = LocalNavigationPath.current
+        val viewModel: StoreViewModel = koinActivityViewModel()
+        val apps by viewModel.apps.collectAsStateWithLifecycle()
         var keyword by remember { mutableStateOf("") }
-        // TODO(sync): 接入 SyncEngine 后替换为真实搜索
-        val results: List<AppMeta> = emptyList()
         val focusRequester = remember { FocusRequester() }
         val focusManager = LocalFocusManager.current
 
@@ -60,12 +62,25 @@ class SearchScene : StackScene() {
             focusRequester.requestFocus()
         }
 
+        val results: List<AppMeta> =
+            remember(keyword, apps) {
+                val kw = keyword.trim().lowercase()
+                if (kw.isEmpty()) {
+                    emptyList()
+                } else {
+                    apps.values
+                        .filter { app ->
+                            app.name.contains(kw, ignoreCase = true) ||
+                                app.packageName.contains(kw, ignoreCase = true) ||
+                                app.summary.contains(kw, ignoreCase = true) ||
+                                app.repo.contains(kw, ignoreCase = true)
+                        }.sortedBy { it.name }
+                }
+            }
+
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = 4.dp, end = 16.dp, top = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = { path.popTop() }) {
@@ -82,13 +97,8 @@ class SearchScene : StackScene() {
                     TextField(
                         value = keyword,
                         onValueChange = { keyword = it },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .focusRequester(focusRequester),
-                        placeholder = {
-                            Text(stringResource(R.string.store_search_hint))
-                        },
+                        modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                        placeholder = { Text(stringResource(R.string.store_search_hint)) },
                         singleLine = true,
                         trailingIcon = {
                             if (keyword.isNotEmpty()) {
@@ -102,10 +112,7 @@ class SearchScene : StackScene() {
                             }
                         },
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions =
-                            KeyboardActions(
-                                onSearch = { focusManager.clearFocus() },
-                            ),
+                        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
                         colors =
                             TextFieldDefaults.colors(
                                 focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -117,35 +124,39 @@ class SearchScene : StackScene() {
                 }
             }
 
-            if (keyword.isBlank()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.search_empty_hint),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else if (results.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.search_no_result),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(results, key = { it.packageName }) { app ->
-                        AppRow(
-                            app = app,
-                            onClick = { path.push(DetailScene(app)) },
+            when {
+                keyword.isBlank() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.search_empty_hint),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                    }
+                }
+                results.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.search_no_result),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                else -> {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        items(results, key = { it.id }) { app ->
+                            AppRow(
+                                app = app,
+                                onClick = { path.push(DetailScene(app)) },
+                            )
+                        }
                     }
                 }
             }

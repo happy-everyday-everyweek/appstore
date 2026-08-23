@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>推荐页 · App Store Today 风格原型</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"PingFang SC","SF Pro Text",sans-serif; background:#0f1115; color:#fff; display:flex; gap:28px; padding:36px; justify-content:center; flex-wrap:wrap; }
+  .phone { width:390px; border-radius:44px; border:1px solid #2a2e37; background:#0c0e12; overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,.5); display:flex; flex-direction:column; }
+  .screen { height:680px; overflow-y:auto; scrollbar-width:none; padding-bottom:24px; }
+  .screen::-webkit-scrollbar { display:none; }
+  .statusbar { height:40px; }
+  .titlebar { padding:8px 16px 8px; display:flex; align-items:baseline; gap:10px; }
+  .titlebar h1{font-size:26px;font-weight:800;letter-spacing:.3px;}
+  .titlebar .date{font-size:13px;color:#9aa2b1;}
+  .searchbar { margin:6px 16px 14px; height:44px; border-radius:22px; background:#1a1e27; display:flex; align-items:center; gap:8px; padding:0 14px; color:#7d8594; font-size:14px; }
+  /* Today 大卡 */
+  .today-card { margin:0 16px 16px; height:230px; border-radius:22px; position:relative; overflow:hidden; display:flex; flex-direction:column; justify-content:space-between; padding:18px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+  .today-card.g1 { background:linear-gradient(160deg,#3a5a8c 0%,#22324e 60%,#141c2e 100%); }
+  .today-card.g2 { background:linear-gradient(160deg,#5b3d8f 0%,#3a2662 55%,#201438 100%); }
+  .today-card.g3 { background:linear-gradient(160deg,#8c5a2a 0%,#5e3a1c 60%,#33200e 100%); }
+  .today-card.cover { background:linear-gradient(160deg,#2f3b52 0%,#1f2733 100%); }
+  .today-card .tag { align-self:flex-start; font-size:13px; font-weight:600; color:#ffd9a0; letter-spacing:.5px; }
+  .today-card .title { font-size:26px; font-weight:800; line-height:1.25; letter-spacing:.2px; }
+  .today-card .sub { font-size:14px; color:rgba(255,255,255,.72); margin-top:6px; }
+  .today-card .emojis { position:absolute; right:14px; bottom:14px; display:flex; gap:6px; }
+  .today-card .emojis span { width:38px; height:38px; border-radius:12px; background:rgba(0,0,0,.28); display:flex; align-items:center; justify-content:center; font-size:20px; }
+  /* 集合页 */
+  .backbar { padding:8px 16px 0; display:flex; align-items:center; gap:10px; }
+  .backbar .b { font-size:16px; color:#7d8594; }
+  .headcard { margin:12px 16px 6px; border-radius:22px; background:linear-gradient(150deg,#3a5a8c,#141c2e); padding:18px; }
+  .headcard .tag{font-size:12px;color:#ffd9a0;font-weight:600;letter-spacing:.5px;}
+  .headcard .t{font-size:22px;font-weight:800;margin-top:4px;}
+  .headcard .s{font-size:13px;color:rgba(255,255,255,.7);margin-top:4px;}
+  .row { display:flex; align-items:center; gap:12px; padding:11px 16px; border-bottom:1px solid #1c212b; }
+  .row .i { width:46px; height:46px; border-radius:12px; background:#262b35; display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .row .meta{flex:1;min-width:0;} .row .t{font-size:14px;font-weight:600;color:#e6e8ee;} .row .s{font-size:12px;color:#9aa2b1;margin-top:2px;}
+  .badge{font-size:10px;background:#1d3a2a;color:#6fd39a;padding:1px 6px;border-radius:6px;margin-left:6px;}
+  /* 阅读页 */
+  .article { padding:18px 24px 24px; }
+  .article .tag { font-size:12px; color:#ffd9a0; font-weight:600; letter-spacing:.5px; }
+  .article h2 { font-size:24px; font-weight:800; line-height:1.35; margin-top:6px; }
+  .article .meta { font-size:13px; color:#9aa2b1; margin-top:10px; }
+  .article .rule { height:1px; background:#22262f; margin:16px 0; }
+  .article p { font-size:15px; line-height:1.9; color:#c9ced9; margin-bottom:14px; }
+  .tagline { text-align:center; padding:10px 16px; border-top:1px solid #22262f; font-size:12px; color:#9aa2b1; }
+  .panel { width:350px; font-size:13px; color:#9aa2b1; line-height:1.9; background:#161a22; border:1px solid #2a2e37; border-radius:16px; padding:16px 18px; align-self:flex-start; }
+  .panel h3{color:#fff;font-size:15px;margin-bottom:8px;}
+</style>
+</head>
+<body>
+
+<!-- 屏幕 1：Today 风格推荐流 -->
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"></div>
+    <div class="titlebar"><h1>推荐</h1><span class="date">8 月 23 日 周日</span></div>
+    <div class="searchbar">🔍 搜索应用</div>
+
+    <div class="today-card g1">
+      <span class="tag">编辑精选</span>
+      <div>
+        <div class="title">本周效率工具<br>一次集齐</div>
+        <div class="sub">4 个应用 · 点击查看合集</div>
+      </div>
+      <div class="emojis"><span>🛠</span><span>📁</span><span>🧮</span></div>
+    </div>
+
+    <div class="today-card g2">
+      <span class="tag">开源精选</span>
+      <div>
+        <div class="title">值得 Star 的<br>开源应用</div>
+        <div class="sub">6 个应用 · 全部开源</div>
+      </div>
+      <div class="emojis"><span>🐙</span><span>🎵</span><span>📖</span></div>
+    </div>
+
+    <div class="today-card cover">
+      <span class="tag">封面图版式</span>
+      <div>
+        <div class="title">ADB 无线调试<br>完全指南</div>
+        <div class="sub">宋易达 · 5 分钟阅读</div>
+      </div>
+      <div style="position:absolute;left:0;right:0;top:46px;bottom:0;display:flex;align-items:center;justify-content:center;font-size:64px;opacity:.5;">🔌</div>
+    </div>
+
+    <div class="today-card g3">
+      <span class="tag">文章</span>
+      <div>
+        <div class="title">如何为开源应用<br>做评级</div>
+        <div class="sub">宋易达 · 3 分钟阅读</div>
+      </div>
+    </div>
+  </div>
+  <div class="tagline">Today 风格 · 全宽大卡堆叠<br>渐变/纯色/封面图均可做底 · 标签+大标题+副标题</div>
+</div>
+
+<!-- 屏幕 2：集合页（点应用集合卡进入） -->
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"></div>
+    <div class="backbar"><span class="b">‹ 返回</span><span style="font-size:14px;color:#7d8594;">推荐</span></div>
+    <div class="headcard">
+      <div class="tag">编辑精选</div>
+      <div class="t">本周效率工具</div>
+      <div class="s">4 个应用 · 效率向合集</div>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="row"><div class="i">🛠</div><div class="meta"><div class="t">Terminal 终端<span class="badge">C</span></div><div class="s">本地终端模拟器</div></div></div>
+      <div class="row"><div class="i">📁</div><div class="meta"><div class="t">Files 文件管理<span class="badge">C</span></div><div class="s">轻量文件管理器</div></div></div>
+      <div class="row"><div class="i">🧮</div><div class="meta"><div class="t">Calc 计算器<span class="badge">B</span></div><div class="s">可编程计算器</div></div></div>
+      <div class="row"><div class="i">🔐</div><div class="meta"><div class="t">Pass 密码库<span class="badge">D</span></div><div class="s">本地密码管理</div></div></div>
+    </div>
+  </div>
+  <div class="tagline">集合页 · 头顶缩略大卡 + 应用列表（复用全部页列表行）</div>
+</div>
+
+<!-- 屏幕 3：阅读页 -->
+<div class="phone">
+  <div class="screen" style="background:#10131a;">
+    <div class="statusbar"></div>
+    <div class="backbar"><span class="b">‹ 返回</span><span style="font-size:14px;color:#7d8594;">文章</span></div>
+    <div class="article">
+      <div class="tag">文章</div>
+      <h2>如何为开源应用做评级</h2>
+      <div class="meta">宋易达 · 2026-08-20 · 阅读 3 分钟</div>
+      <div class="rule"></div>
+      <p>应用市场的评级体系分两层：算法初评与人工调整。算法只认一个变量——Star 数。</p>
+      <p>开源应用 Star ≥ 10k 进入 C 级，低于 10k 落在 D 级；闭源应用一律 E 级，算法无权干涉。C 级以上（B / A）完全由人工判定，社区推荐票是唯一的触发通道……</p>
+      <p style="color:#7d8594;font-size:13px;">正文全文随推荐包下发，离线可读，无需访问 GitHub。</p>
+    </div>
+  </div>
+  <div class="tagline">阅读页 · 正文随包下发</div>
+</div>
+
+<div class="panel">
+  <h3>Today 布局要点（本原型实现）</h3>
+  <p>· 全宽大卡上下堆叠（屏宽 − 32dp，高约 230dp，圆角 22dp），无头部结构，沉浸式<br>
+  · 卡片四要素：左上分类标签（小字）、底部大标题（26sp 粗体）、标题下副标题（应用数/作者）、可选背景（渐变/纯色 color / 封面大图 cover，均随包下发）<br>
+  · 应用集合卡：底部可叠 3 个应用小图标做点缀（可选 emojis 字段，也可不做，示意用）<br>
+  · 交互：点整卡进集合页/阅读页；集合页头顶保留缩略大卡，下方为应用列表行<br>
+  · 与已定约定完全兼容：封面独立字段、color 可选着色、正文随包、类型可扩展、未知类型安全降级<br>
+  · 与你前面三个方案的关系：方案 1/2/3 是"卡内信息组织"的差异，Today 是"整卡沉浸 + 信息下沉到底部"——集合内容的图标不再平铺在卡面，而是收进集合页</p>
+</div>
+
+</body>
+</html>

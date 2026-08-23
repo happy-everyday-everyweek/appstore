@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>推荐页 · 文章卡片与布局变体 · MD3 检查</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"PingFang SC","SF Pro Text",sans-serif; background:#0f1115; color:#e6e8ee; display:flex; gap:28px; padding:36px; justify-content:center; flex-wrap:wrap; }
+  .phone { width:390px; border-radius:44px; border:1px solid #2a2e37; background:#171a21; overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,.5); display:flex; flex-direction:column; }
+  .screen { height:620px; overflow-y:auto; scrollbar-width:none; padding-bottom:20px; }
+  .screen::-webkit-scrollbar { display:none; }
+  .statusbar { height:40px; }
+  .titlebar { padding:8px 20px 4px; } .titlebar h1{font-size:24px;font-weight:700;}
+  .searchbar { margin:8px 20px 12px; height:44px; border-radius:22px; background:#22262f; display:flex; align-items:center; gap:8px; padding:0 14px; color:#7d8594; font-size:14px; }
+  .flow { padding:0 20px; display:flex; flex-direction:column; gap:18px; }
+  .card-head { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
+  .card-title { font-size:17px; font-weight:700; } .card-sub { font-size:13px; color:#9aa2b1; }
+  /* 文章变体 A：封面大图 */
+  .cover { width:100%; height:130px; border-radius:14px; background:linear-gradient(135deg,#2f3b52,#1f2733); display:flex; align-items:center; justify-content:center; font-size:30px; }
+  /* 文章变体 B：纯文字 */
+  .textcard { border-radius:16px; border:1px solid #2a2e37; padding:14px 16px; display:flex; flex-direction:column; gap:6px; }
+  /* 布局变体：分区标题 + 横向滑动整卡集合 */
+  .section { margin-bottom:6px; display:flex; align-items:baseline; gap:10px; }
+  .section h2 { font-size:19px; font-weight:700; } .section span { font-size:12px; color:#9aa2b1; }
+  .hscroll { display:flex; gap:14px; overflow-x:auto; scrollbar-width:none; padding-bottom:4px; }
+  .hcard { width:230px; flex-shrink:0; background:#1d2430; border-radius:16px; padding:14px; }
+  .tagline { text-align:center; padding:10px 16px; border-top:1px solid #22262f; font-size:12px; color:#9aa2b1; }
+  .panel { width:360px; font-size:13px; color:#9aa2b1; line-height:1.85; background:#1b1e26; border:1px solid #2a2e37; border-radius:16px; padding:16px 18px; align-self:flex-start; }
+  .panel h3{color:#e6e8ee;font-size:15px;margin-bottom:6px;}
+  .ok{color:#6fd39a;} .warn{color:#e0b968;} .bad{color:#e07a7a;}
+</style>
+</head>
+<body>
+
+<!-- 文章变体 A：独立封面大图 -->
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"></div>
+    <div class="titlebar"><h1>推荐</h1></div>
+    <div class="searchbar">🔍 搜索应用</div>
+    <div class="flow">
+      <div class="cover">📄 封面图（独立 cover 字段）</div>
+      <div class="card-title">如何为开源应用做评级</div>
+      <div class="card-sub">宋易达 · 2026-08-20 · 阅读 3 分钟</div>
+      <div style="height:1px;background:#22262f;margin:4px 0;"></div>
+      <div class="cover" style="background:linear-gradient(135deg,#3a2f2f,#241d1d);">🔌 封面图 2</div>
+      <div class="card-title">ADB 无线调试完全指南</div>
+      <div class="card-sub">宋易达 · 2026-08-18 · 阅读 5 分钟</div>
+    </div>
+  </div>
+  <div class="tagline">文章变体 A · 封面大图（16:9）<br>视觉强、辨识度高 · 封面为独立字段，随包下发</div>
+</div>
+
+<!-- 文章变体 B：纯文字 -->
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"></div>
+    <div class="titlebar"><h1>推荐</h1></div>
+    <div class="searchbar">🔍 搜索应用</div>
+    <div class="flow">
+      <div class="textcard">
+        <div class="card-title">如何为开源应用做评级</div>
+        <div class="card-sub">宋易达 · 2026-08-20</div>
+      </div>
+      <div class="textcard">
+        <div class="card-title">ADB 无线调试完全指南</div>
+        <div class="card-sub">宋易达 · 2026-08-18</div>
+      </div>
+      <div class="textcard">
+        <div class="card-title">Shizuku 与 ADB 的关系，一次说清</div>
+        <div class="card-sub">宋易达 · 2026-08-15</div>
+      </div>
+    </div>
+  </div>
+  <div class="tagline">文章变体 B · 纯文字（Outlined 卡片）<br>轻量、一屏多篇 · 无封面字段时可用</div>
+</div>
+
+<!-- 布局变体：分区标题 + 横向滑动整卡集合 -->
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"></div>
+    <div class="titlebar"><h1>推荐</h1></div>
+    <div class="searchbar">🔍 搜索应用</div>
+    <div class="flow">
+      <div class="section"><h2>编辑精选</h2><span>查看全部 →</span></div>
+      <div class="hscroll">
+        <div class="hcard"><div style="font-size:26px;margin-bottom:8px;">🛠</div><div style="font-weight:700;font-size:15px;">效率工具合集</div><div style="font-size:12px;color:#9aa2b1;margin-top:4px;">Terminal · Files · Calc</div></div>
+        <div class="hcard"><div style="font-size:26px;margin-bottom:8px;">🎵</div><div style="font-weight:700;font-size:15px;">音乐与媒体</div><div style="font-size:12px;color:#9aa2b1;margin-top:4px;">柠檬音乐 · EQ · 频谱</div></div>
+        <div class="hcard"><div style="font-size:26px;margin-bottom:8px;">🔐</div><div style="font-weight:700;font-size:15px;">安全与隐私</div><div style="font-size:12px;color:#9aa2b1;margin-top:4px;">Pass · VPN · 加密</div></div>
+      </div>
+      <div class="section" style="margin-top:8px;"><h2>近期文章</h2><span>查看全部 →</span></div>
+      <div class="hscroll">
+        <div class="hcard"><div style="font-weight:700;font-size:14px;">如何为开源应用做评级</div><div style="font-size:12px;color:#9aa2b1;margin-top:4px;">宋易达 · 08-20</div></div>
+        <div class="hcard"><div style="font-weight:700;font-size:14px;">ADB 无线调试完全指南</div><div style="font-size:12px;color:#9aa2b1;margin-top:4px;">宋易达 · 08-18</div></div>
+        <div class="hcard"><div style="font-weight:700;font-size:14px;">Shizuku 与 ADB 的关系</div><div style="font-size:12px;color:#9aa2b1;margin-top:4px;">宋易达 · 08-15</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="tagline">布局变体 C · 分区标题 + 横向滑动整卡集合（MD3 Scrolling Collections 模式）<br>结构化的"栏"式运营 · 卡片独立、整卡点击进集合/文章</div>
+</div>
+
+<div class="panel">
+  <h3>MD3 规范检查报告（对现有设计）</h3>
+  <p><span class="ok">✓</span> 详情页使用 <b>Extended FAB</b>（MD3 规范组件）<br>
+  <span class="ok">✓</span> 列表行（图标 + 两行文本 titleMedium/bodyMedium）符合 MD3 <b>List</b> 规格<br>
+  <span class="ok">✓</span> 颜色使用 <b>surfaceContainer</b> 系列容器色（MD3 色彩 token）<br>
+  <span class="warn">△</span> 底栏为自定义圆形胶囊，非 MD3 <b>NavigationBar</b>（80dp 高 + pill 指示器 + labelMedium）；若坚持柠檬音乐视觉则属于品牌化偏离，建议保留胶囊形但统一为 3~5 项、加活动指示<br>
+  <span class="warn">△</span> 搜索框 48dp / 圆角 24dp，接近 MD3 <b>Docked SearchBar</b>（48dp+，圆角 28dp），建议圆角改为 28dp 完全对齐<br>
+  <span class="warn">△</span> 卡片圆角 20dp 大于 MD3 Card 默认 12dp；MD3 允许品牌化 shape 系统，16dp 是常见折中<br>
+  <span class="warn">△</span> "无背景卡片"在 MD3 中不属于 Card（卡片必有容器色），对应模式是<span class="ok">裸内容区块 + 可选着色容器</span>；本设计以 surface 为默认底色、color 可选着色，语义成立<br>
+  <span class="ok">✓</span> 详情页标签行（评级/开源/权限）为 Chip 类组件，符合 MD3 辅助分类用法</p>
+  <h3>布局变体说明</h3>
+  <p>变体 C 采用 MD3 的 <b>Scrolling Collection</b> 数据展示模式：分区标题 + 横向滑动整卡。适合"编辑精选 / 近期文章"多分区运营；卡片独立、不缩窄图标行，避免横向滚动内嵌的嵌套滚动问题。作为推荐页整体骨架的候选与方案 1/2/3 并列。</p>
+</div>
+
+</body>
+</html>

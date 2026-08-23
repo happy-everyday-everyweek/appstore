@@ -93,7 +93,7 @@ fun AppIcon(
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         contentAlignment = Alignment.Center,
     ) {
-        if (app.iconUrl.isBlank()) {
+        if (app.icon.isBlank()) {
             Icon(
                 imageVector = Icons.Default.Android,
                 contentDescription = null,
@@ -101,9 +101,9 @@ fun AppIcon(
                 modifier = Modifier.size(size * 0.6f),
             )
         } else {
-            androidx.compose.runtime.key(app.iconUrl) {
+            androidx.compose.runtime.key(app.icon) {
                 me.spica27.spicamusic.ui.components.StoreAsyncIcon(
-                    url = app.iconUrl,
+                    url = app.icon,
                     size = size,
                     placeholderIcon = Icons.Default.Android,
                 )
@@ -150,7 +150,7 @@ fun AppRow(
                 )
             }
             Text(
-                text = app.summary.ifBlank { app.repoOwner + "/" + app.repoName },
+                text = app.summary.ifBlank { app.repo },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

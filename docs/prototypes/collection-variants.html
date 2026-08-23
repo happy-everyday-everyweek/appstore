@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>推荐页 · 应用集合卡片 · 三方案对比</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,"PingFang SC","SF Pro Text",sans-serif; background:#0f1115; color:#e6e8ee; display:flex; gap:28px; padding:36px; justify-content:center; flex-wrap:wrap; }
+  .phone { width:390px; border-radius:44px; border:1px solid #2a2e37; background:#171a21; overflow:hidden; box-shadow:0 24px 80px rgba(0,0,0,.5); display:flex; flex-direction:column; }
+  .screen { height:660px; overflow-y:auto; scrollbar-width:none; padding-bottom:20px; }
+  .screen::-webkit-scrollbar { display:none; }
+  .statusbar { height:40px; }
+  .titlebar { padding:8px 20px 4px; } .titlebar h1{font-size:24px;font-weight:700;}
+  .searchbar { margin:8px 20px 12px; height:44px; border-radius:22px; background:#22262f; display:flex; align-items:center; gap:8px; padding:0 14px; color:#7d8594; font-size:14px; }
+  .flow { padding:0 20px; display:flex; flex-direction:column; gap:16px; }
+  /* 方案1：横向图标行卡片（无背景） */
+  .card-head { display:flex; align-items:baseline; gap:8px; margin-bottom:12px; }
+  .card-title { font-size:17px; font-weight:700; } .card-sub { font-size:13px; color:#9aa2b1; }
+  .apps { display:flex; gap:16px; overflow-x:auto; scrollbar-width:none; }
+  .app { display:flex; flex-direction:column; align-items:center; gap:6px; width:60px; flex-shrink:0; }
+  .app .i { width:54px; height:54px; border-radius:14px; background:#262b35; display:flex; align-items:center; justify-content:center; font-size:22px; }
+  .app .n { font-size:11px; color:#c3c9d4; max-width:60px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* 方案2：图标网格（MD3 GridList 思路） */
+  .grid { display:flex; flex-wrap:wrap; gap:14px 16px; }
+  .grid .g { width:31%; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  /* 方案3：垂直列表（复用全部页行样式） */
+  .row { display:flex; align-items:center; gap:12px; padding:9px 0; border-bottom:1px solid #22262f; }
+  .row:last-child{border-bottom:none;}
+  .row .i { width:46px; height:46px; border-radius:12px; background:#262b35; display:flex; align-items:center; justify-content:center; font-size:20px; }
+  .row .meta{flex:1;min-width:0;} .row .t{font-size:14px;font-weight:600;} .row .s{font-size:12px;color:#9aa2b1;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .badge{font-size:10px;background:#1d3a2a;color:#6fd39a;padding:1px 6px;border-radius:6px;margin-left:6px;}
+  .panel { position:absolute; width:340px; margin-top:12px; font-size:13px; color:#9aa2b1; line-height:1.9; background:#1b1e26; border:1px solid #2a2e37; border-radius:16px; padding:16px 18px; }
+  .panel h3{color:#e6e8ee;font-size:15px;margin-bottom:6px;} .panel code{background:#22262f;padding:1px 6px;border-radius:4px;font-size:12px;color:#8fa3ff;}
+  .tagline{ text-align:center; padding:10px 16px; border-top:1px solid #22262f; font-size:12px; color:#9aa2b1; }
+</style>
+</head>
+<body>
+
+<!-- 方案1：内嵌横向图标行 -->
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"></div>
+    <div class="titlebar"><h1>推荐</h1></div>
+    <div class="searchbar">🔍 搜索应用</div>
+    <div class="flow">
+      <div class="card-head"><span class="card-title">本周精选工具</span><span class="card-sub">4 个应用</span></div>
+      <div class="apps">
+        <div class="app"><div class="i">🛠</div><div class="n">Terminal</div></div>
+        <div class="app"><div class="i">📁</div><div class="n">Files</div></div>
+        <div class="app"><div class="i">🧮</div><div class="n">Calc</div></div>
+        <div class="app"><div class="i">🔐</div><div class="n">Pass</div></div>
+      </div>
+      <div style="height:1px;background:#22262f;margin:10px 0;"></div>
+      <div class="card-head"><span class="card-title">开源应用精选</span><span class="card-sub">6 个应用</span></div>
+      <div class="apps">
+        <div class="app"><div class="i">🐙</div><div class="n">GitLink</div></div>
+        <div class="app"><div class="i">🎵</div><div class="n">Music</div></div>
+        <div class="app"><div class="i">📖</div><div class="n">Reader</div></div>
+        <div class="app"><div class="i">🎨</div><div class="n">Paint</div></div>
+        <div class="app"><div class="i">🌐</div><div class="n">Browser</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="tagline">方案 1 · 横向图标行（卡片头 + 可滑动图标行）<br>无背景色，可选 color 着色 · 点图标直接进详情</div>
+</div>
+
+<!-- 方案2：图标网格 -->
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"></div>
+    <div class="titlebar"><h1>推荐</h1></div>
+    <div class="searchbar">🔍 搜索应用</div>
+    <div class="flow">
+      <div style="background:#1d2430; border-radius:16px; padding:16px;">
+        <div class="card-head"><span class="card-title">本周精选工具</span><span class="card-sub">4 个应用</span></div>
+        <div class="grid">
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">🛠</div><span style="font-size:11px;">Terminal</span></div>
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">📁</div><span style="font-size:11px;">Files</span></div>
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">🧮</div><span style="font-size:11px;">Calc</span></div>
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">🔐</div><span style="font-size:11px;">Pass</span></div>
+        </div>
+      </div>
+      <div style="background:#2a2436; border-radius:16px; padding:16px;">
+        <div class="card-head"><span class="card-title">开源应用精选</span><span class="card-sub">6 个应用</span></div>
+        <div class="grid">
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">🐙</div><span style="font-size:11px;">GitLink</span></div>
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">🎵</div><span style="font-size:11px;">Music</span></div>
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">📖</div><span style="font-size:11px;">Reader</span></div>
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">🎨</div><span style="font-size:11px;">Paint</span></div>
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">🌐</div><span style="font-size:11px;">Browser</span></div>
+          <div class="g"><div class="i" style="width:56px;height:56px;border-radius:16px;background:#262b35;display:flex;align-items:center;justify-content:center;font-size:22px;">➕</div><span style="font-size:11px;">更多</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="tagline">方案 2 · 图标网格（MD3 网格/list 思路）<br>着色容器卡片 + 2 列网格 · 一点即进集合页</div>
+</div>
+
+<!-- 方案3：垂直列表（信息密度最高） -->
+<div class="phone">
+  <div class="screen">
+    <div class="statusbar"></div>
+    <div class="titlebar"><h1>推荐</h1></div>
+    <div class="searchbar">🔍 搜索应用</div>
+    <div class="flow">
+      <div style="border-radius:16px; padding:4px 16px; background:#1d2430;">
+        <div class="card-head" style="padding-top:12px;"><span class="card-title">本周精选工具</span><span class="card-sub">4 个应用</span></div>
+        <div class="row"><div class="i">🛠</div><div class="meta"><div class="t">Terminal 终端<span class="badge">C</span></div><div class="s">本地终端模拟器</div></div></div>
+        <div class="row"><div class="i">📁</div><div class="meta"><div class="t">Files 文件管理<span class="badge">C</span></div><div class="s">轻量文件管理器</div></div></div>
+        <div class="row"><div class="i">🧮</div><div class="meta"><div class="t">Calc 计算器<span class="badge">B</span></div><div class="s">可编程计算器</div></div></div>
+        <div class="row"><div class="i">🔐</div><div class="meta"><div class="t">Pass 密码库<span class="badge">D</span></div><div class="s">本地密码管理</div></div></div>
+      </div>
+      <div style="border-radius:16px; padding:4px 16px; background:#2a2436;">
+        <div class="card-head" style="padding-top:12px;"><span class="card-title">开源应用精选</span><span class="card-sub">6 个应用</span></div>
+        <div class="row"><div class="i">🐙</div><div class="meta"><div class="t">GitLink<span class="badge">A</span></div><div class="s">GitHub 下载加速</div></div></div>
+        <div class="row"><div class="i">🎵</div><div class="meta"><div class="t">柠檬音乐<span class="badge">C</span></div><div class="s">本地音乐播放器</div></div></div>
+        <div class="row"><div class="i">📖</div><div class="meta"><div class="t">Reader<span class="badge">D</span></div><div class="s">RSS 阅读器</div></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="tagline">方案 3 · 垂直列表（复用全部页列表行）<br>信息密度最高，一屏看 7-8 个应用 · 带评级与简介</div>
+</div>
+
+<div class="panel">
+  <h3>三方案对比要点</h3>
+  <b style="color:#e6e8ee;">方案 1（横向图标行）</b><br>
+  · 视觉轻、一屏可放多集合；但应用信息最少（只有图标+名字）<br>
+  · 横向滑动与页面纵向滚动方向正交，MD3 常见于"横向集合"模式<br><br>
+  <b style="color:#e6e8ee;">方案 2（图标网格）</b><br>
+  · 信息密度中等，图标大，观感整齐（类似 F-Droid 精选区）<br>
+  · 一屏只能容纳 1-2 个集合，集合数量多时页面拖长<br><br>
+  <b style="color:#e6e8ee;">方案 3（垂直列表）</b><br>
+  · 信息最全（名称/简介/评级），用户不动脑直接浏览<br>
+  · 一屏约 7-8 行，集合逐个展开后很长；与"全部页"外观趋同，推荐位辨识度低<br><br>
+  <b style="color:#e6e8ee;">共同点</b>：均无背景色（可选 color 着色）；标题+副标题头；点击行为可统一为"点图标进详情、点头部进集合页"
+</div>
+
+</body>
+</html>
