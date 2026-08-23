@@ -16,6 +16,11 @@ class StoreRepository(
     private val engine: SyncEngine,
     private val store: SyncStore,
 ) {
+    data class SyncVersions(
+        val appIndexVersion: String? = null,
+        val discoverVersion: String? = null,
+    )
+
     private val _apps = MutableStateFlow<AppIndex>(emptyMap())
     val apps: StateFlow<AppIndex> = _apps.asStateFlow()
 
@@ -24,6 +29,9 @@ class StoreRepository(
 
     private val _updateAvailable = MutableStateFlow<UpdateInfo?>(null)
     val updateAvailable: StateFlow<UpdateInfo?> = _updateAvailable.asStateFlow()
+
+    private val _syncVersions = MutableStateFlow(SyncVersions())
+    val syncVersions: StateFlow<SyncVersions> = _syncVersions.asStateFlow()
 
     /** 启动时：先读本地缓存（离线可用）；缓存为空（首启）走前台全量，否则后台静默增量 */
     suspend fun bootstrap() {
@@ -41,6 +49,7 @@ class StoreRepository(
     suspend fun refresh() {
         engine.sync(SyncChannel.AppIndex, SyncMode.Auto)
         engine.sync(SyncChannel.Discover, SyncMode.Auto)
+        reloadFromCache()
     }
 
     /** 首次使用/损坏兜底：前台全量 */
@@ -62,5 +71,10 @@ class StoreRepository(
         store.readCachedText(SyncChannel.Discover)?.let {
             runCatching { _cards.value = DiscoverIndexParser.parse(it) }
         }
+        _syncVersions.value =
+            SyncVersions(
+                appIndexVersion = store.readVersion(SyncChannel.AppIndex),
+                discoverVersion = store.readVersion(SyncChannel.Discover),
+            )
     }
 }

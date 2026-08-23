@@ -61,7 +61,13 @@ object AppModule {
             // 商店数据仓库（StateFlow 数据源）
             single<StoreRepository> { StoreRepository(get(), get()) }
 
-            // 商店主页 ViewModel（底栏页面状态 + 数据仓库 + 同步启动）
+            // 商店主页 ViewModel（数据仓库 + 同步启动）
+            viewModel {
+                me.spica27.spicamusic.ui.home
+                    .HomeViewModel()
+            }
+
+            // 商店 ViewModel（数据 / 下载 / 自更新）
             viewModel { StoreViewModel(get(), get(), get()) }
         }
 }
