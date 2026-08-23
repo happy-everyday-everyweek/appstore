@@ -14,7 +14,6 @@ import java.io.IOException
  * 一段日志保留下来，供事后定位。
  */
 object LogcatKeeper {
-
     private const val TAG = "DSH_LOGCAT"
     private const val INTERVAL_MS = 3000L
     private const val TAIL_LINES = 400
@@ -71,9 +70,10 @@ object LogcatKeeper {
 
     /** 抓取日志：先试 su(root)，失败回退普通 logcat（仅自己进程可见）。 */
     private fun dumpLogcat(): String? {
-        var out = exec(
-            listOf("su", "-c", "logcat -d -b crash -b main -b system -v threadtime -t $TAIL_LINES"),
-        )
+        var out =
+            exec(
+                listOf("su", "-c", "logcat -d -b crash -b main -b system -v threadtime -t $TAIL_LINES"),
+            )
         if (out == null) {
             out = exec(listOf("logcat", "-d", "-b", "main", "-v", "threadtime", "-t", "$TAIL_LINES"))
         }

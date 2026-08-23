@@ -7,10 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
 import me.jessyan.autosize.internal.CustomAdapt
 import me.spica27.spicamusic.ui.AppScaffold
-import me.spica27.spicamusic.ui.audioeffects.AudioEffectsViewModel
 
 /**
  * 主 Activity
@@ -18,8 +16,6 @@ import me.spica27.spicamusic.ui.audioeffects.AudioEffectsViewModel
 class MainActivity :
     ComponentActivity(),
     CustomAdapt {
-    private val audioEffectsViewModel by viewModels<AudioEffectsViewModel>()
-
     // Android 13+ 通知权限（前台服务通知需要）
     private val notificationPermissionLauncher =
         registerForActivityResult(

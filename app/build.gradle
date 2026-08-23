@@ -14,7 +14,7 @@ plugins {
 
 android {
   namespace 'me.spica27.spicamusic'
-  compileSdk = 37
+  compileSdk = 36
 
   def props = new Properties()
   file("$rootDir/gradle.properties").withInputStream { props.load(it) }
@@ -31,7 +31,7 @@ android {
   defaultConfig {
     applicationId "com.dsh.mobile"
     minSdk 29
-    targetSdk 37
+    targetSdk 36
     versionCode buildVersionCode
     versionName buildVersionName
 
@@ -116,14 +116,9 @@ dependencies {
   // 模块依赖
   implementation project(':common')
   implementation project(':core-preferences')
-  implementation project(':feature-library-data')
-  implementation project(':feature-player-data')
-  implementation project(':feature-lyrics-data')
-  implementation project(':feature-library-domain')
-  implementation project(':feature-player-domain')
   implementation project(':feature-settings-domain')
-  implementation project(':feature-lyrics-domain')
   implementation fileTree(dir: "libs", include: ["*.jar", "*.aar"])
+  implementation libs.androidx.datastore.preferences
   implementation libs.androidx.core.ktx
   implementation libs.androidx.lifecycle.runtime.ktx
   implementation libs.androidx.lifecycle.process

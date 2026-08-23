@@ -1,6 +1,5 @@
 <resources>
-  <string name="app_name">DSH</string>
-  <string name="action_settings">Settings</string>
+   <string name="action_settings">Settings</string>
   <string name="play_all">Play All</string>
   <string name="first_fragment_label">First Fragment</string>
   <string name="second_fragment_label">Second Fragment</string>
@@ -621,9 +620,28 @@
   <string name="playlist_suggestion_5">Study Focus</string>
 
   <!-- Navigation tabs -->
-  <string name="nav_tab_chat">对话</string>
-  <string name="nav_tab_terminal">终端</string>
+  <string name="nav_tab_discover">推荐</string>
+  <string name="nav_tab_library">全部</string>
+  <string name="nav_tab_search">搜索</string>
   <string name="nav_tab_settings">设置</string>
+
+  <!-- Store -->
+  <string name="app_name">AppStore</string>
+  <string name="store_search_hint">搜索应用</string>
+  <string name="discover_coming_soon">推荐页建设中</string>
+  <string name="empty_library">暂无应用</string>
+  <string name="search_empty_hint">输入关键字搜索应用</string>
+  <string name="search_no_result">没有找到匹配的应用</string>
+  <string name="label_open_source">开源</string>
+  <string name="label_closed_source">闭源</string>
+  <string name="label_permission_none">无特殊权限</string>
+  <string name="label_permission_adb">ADB</string>
+  <string name="label_permission_root">Root</string>
+  <string name="detail_download">下载</string>
+  <string name="detail_readme">介绍</string>
+  <string name="detail_permissions">权限</string>
+  <string name="no_readme">该应用暂未提供 README</string>
+  <string name="download_coming_soon">下载功能接入中</string>
 
   <!-- About -->
   <string name="settings_about">About</string>
