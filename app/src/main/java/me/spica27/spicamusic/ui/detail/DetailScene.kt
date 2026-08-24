@@ -68,7 +68,6 @@ import me.spica27.spicamusic.ui.components.OpenSourceTag
 import me.spica27.spicamusic.ui.components.SpeedChart
 import me.spica27.spicamusic.ui.components.TagChip
 import me.spica27.spicamusic.ui.components.gradeColors
-import me.spica27.spicamusic.ui.discover.MarkdownPlain
 import me.spica27.spicamusic.ui.home.StoreViewModel
 import me.spica27.spicamusic.ui.home.StoreViewModel.DownloadTaskUi
 import org.koin.compose.viewmodel.koinActivityViewModel
@@ -339,7 +338,8 @@ fun DetailScreen(app: AppMeta) {
                         }
                     }
                 if (readmeText != null) {
-                    me.spica27.spicamusic.ui.components.MarkdownContent(text = readmeText)
+                    me.spica27.spicamusic.ui.components
+                        .MarkdownContent(md = readmeText)
                 } else {
                     Text(
                         text =
