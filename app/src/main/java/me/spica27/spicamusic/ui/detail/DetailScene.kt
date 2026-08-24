@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -80,7 +82,8 @@ fun DetailScreen(app: AppMeta) {
     // 上游应用（upstream 指向的系统 ID 解析）
     val upstreamApp = app.upstreamId?.let { viewModel.appById(it) }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    // 全面屏适配：全屏详情页避开状态栏与系统导航条
+    Box(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
         // 背景：图标模糊铺底
         if (app.icon.isNotBlank()) {
             me.spica27.spicamusic.ui.components

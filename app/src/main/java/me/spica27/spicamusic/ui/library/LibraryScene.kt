@@ -1,8 +1,10 @@
 package me.spica27.spicamusic.ui.library
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +46,8 @@ fun LibraryScene(onOpenSearch: () -> Unit) {
             .sortedWith(compareBy({ it.grade.ordinal }, { it.name }))
             .filter { gradeFilter == null || it.grade == gradeFilter }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // 全面屏适配：顶部避开状态栏；列表底部避让常驻底栏
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         Text(
             text = stringResource(R.string.nav_tab_library),
             style = MaterialTheme.typography.headlineSmall,
@@ -54,7 +57,10 @@ fun LibraryScene(onOpenSearch: () -> Unit) {
             onClick = onOpenSearch,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 100.dp),
+        ) {
             item {
                 GradeFilterRow(
                     selected = gradeFilter,

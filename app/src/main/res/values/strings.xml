@@ -632,6 +632,7 @@
   <string name="empty_library">暂无应用</string>
   <string name="search_empty_hint">输入关键字搜索应用</string>
   <string name="search_no_result">没有找到匹配的应用</string>
+  <string name="search_no_result_clear">换一个关键词试试</string>
   <string name="label_open_source">开源</string>
   <string name="label_closed_source">闭源</string>
   <string name="label_permission_none">无特殊权限</string>

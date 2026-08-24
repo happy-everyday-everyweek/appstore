@@ -85,8 +85,9 @@ class StoreViewModel(
 
     /** 手动触发后台静默同步（设置页"立即同步"） */
     fun refreshSilently(context: Context) {
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.refresh()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.refresh() }
+            // Toast 必须在主线程
             android.widget.Toast
                 .makeText(context, "同步完成", android.widget.Toast.LENGTH_SHORT)
                 .show()
@@ -95,9 +96,10 @@ class StoreViewModel(
 
     /** 手动检查客户端自身更新（设置页"检查更新"） */
     fun checkSelfUpdate(context: Context) {
-        viewModelScope.launch(Dispatchers.IO) {
-            repository.checkSelfUpdate(updater)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.checkSelfUpdate(updater) }
             val info = repository.updateAvailable.value
+            // Toast 必须在主线程
             android.widget.Toast
                 .makeText(
                     context,

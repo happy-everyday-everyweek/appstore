@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -41,7 +43,8 @@ class CollectionScene(
         val apps by viewModel.apps.collectAsStateWithLifecycle()
         val path = LocalNavigationPath.current
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        // 全面屏适配：全屏集合页避开状态栏与系统导航条
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             IconButton(
                 onClick = { path.popTop() },
                 modifier = Modifier.padding(6.dp),

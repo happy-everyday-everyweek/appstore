@@ -4,7 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -45,7 +47,8 @@ class ArticleScene(
                     ?: "（正文尚未随包同步，请稍后重试）"
             }
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        // 全面屏适配：全屏文章页避开状态栏与系统导航条
+        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             IconButton(
                 onClick = { path.popTop() },
                 modifier = Modifier.padding(6.dp),
