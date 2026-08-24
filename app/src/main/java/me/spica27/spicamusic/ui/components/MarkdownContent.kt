@@ -11,12 +11,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import me.spica27.spicamusic.store.StoreAssets
 import me.spica27.spicamusic.ui.discover.MarkdownPlain
-import java.io.File
 
 /**
  * README/文章正文 Markdown 渲染：
