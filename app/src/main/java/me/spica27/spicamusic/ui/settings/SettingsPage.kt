@@ -281,7 +281,7 @@ fun SettingsPage() {
                         value = debugAppId,
                         onValueChange = { debugAppId = it.filter(Char::isDigit).take(6) },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("应用 ID（如 1047）") },
+                        placeholder = { Text("应用 ID，如 1047") },
                         singleLine = true,
                     )
                     androidx.compose.material3.Button(

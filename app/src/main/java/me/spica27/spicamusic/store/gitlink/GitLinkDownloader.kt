@@ -60,6 +60,16 @@ class GitLinkDownloader(
                 if (file.length() < 1) {
                     throw IOException("下载文件为空（0B），疑似空响应")
                 }
+                // HTML 挑战页嗅探：gh-proxy 系列风控/未登录时对文本资产返回 200 + HTML Loading 页，
+                // 小文本（patch.json/README）会被误判为成功；嗅探到 <html 即视为失败换下一镜像
+                if (file.length() <= 512 * 1024) {
+                    val buf = ByteArray(512)
+                    val n = file.inputStream().use { it.read(buf) }
+                    val head = String(buf, 0, n, Charsets.UTF_8).trimStart().lowercase()
+                    if (head.startsWith("<!doctype html") || head.startsWith("<html")) {
+                        throw IOException("镜像返回 HTML 挑战页而非目标内容（前 ${head.take(40)}…），换源")
+                    }
+                }
                 if (expectedSha256 != null) {
                     val actual = sha256(file)
                     if (actual != expectedSha256) {

@@ -34,7 +34,10 @@ object AppIndexParser {
             name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
             icon = obj["icon"]?.jsonPrimitive?.contentOrNull ?: "",
             summary = obj["summary"]?.jsonPrimitive?.contentOrNull ?: "",
-            openSource = obj["openSource"]?.jsonPrimitive?.booleanOrNull ?: false,
+            openSource =
+                obj["openSource"]?.jsonPrimitive?.booleanOrNull
+                    ?: obj["source"]?.jsonObject?.get("openSourceVerified")?.jsonPrimitive?.booleanOrNull
+                    ?: false,
             specialPermissions = (obj["specialPermissions"]?.jsonArray ?: emptyList())
                 .mapNotNull { it.jsonPrimitive.contentOrNull }
                 .map { SpecialPermission.fromRaw(it) }

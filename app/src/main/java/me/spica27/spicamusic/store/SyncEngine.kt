@@ -6,6 +6,8 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.parseToJsonElement
 import me.spica27.spicamusic.common.entity.appstore.AppIndex
 import me.spica27.spicamusic.common.entity.appstore.AppIndexParser
 import me.spica27.spicamusic.common.entity.appstore.AppMeta
@@ -79,8 +81,13 @@ class SyncEngine(
             "Sync",
             "[${channel.name}] 清单: base=${patch.base} target=${patch.target} algo=${patch.algorithm}",
         )
-        // target 为空（历史 Release 数据缺失）时不得判定“无更新”，必须走全量
-        if (!patch.target.isNullOrBlank() && patch.target == last && store.cacheFile(channel).exists()) {
+        // target 为空（历史 Release 数据缺失）时不得判定“无更新”，必须走全量；
+        // 另：即使版本一致，本地资产（图标/README）缺失时也强制全量补齐（历史增量包不带资产的兜底）
+        val missingAssets = assetsMissing(channel)
+        if (missingAssets) {
+            DebugLog.w("Sync", "[${channel.name}] 本地资产缺失，忽略版本一致并强制全量补齐")
+        }
+        if (!patch.target.isNullOrBlank() && patch.target == last && store.cacheFile(channel).exists() && !missingAssets) {
             DebugLog.i("Sync", "[${channel.name}] 版本一致，无需更新")
             return SyncResult(changed = false, applied = PackageKind.None)
         }
@@ -122,6 +129,12 @@ class SyncEngine(
                 return applyFull(channel, baseUrl, patch)
             }
             store.writeCachedText(channel, serializeIndex(merged))
+            // 兜底：增量包若不含资产（历史发布物），补齐资产必须走全量
+            if (entries.keys.none { it.startsWith(ASSETS_PREFIX) }) {
+                zip.delete()
+                DebugLog.i("Sync", "[${channel.name}] 增量包无资产，回退全量以补齐图标/README")
+                return applyFull(channel, baseUrl, patch)
+            }
             store.writeAssets(entries.filterKeys { it.startsWith(ASSETS_PREFIX) })
             store.writeVersion(channel, patch.target ?: patch.base ?: "")
             zip.delete()
@@ -207,6 +220,26 @@ class SyncEngine(
                 ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
                 ?: emptyList()
         return ChangeSet(addedOrChanged = added, removed = removed)
+    }
+
+    /** 本地资产完整性检查：缓存内前 5 个应用的图标/README 引用文件缺失时需全量补齐 */
+    private fun assetsMissing(channel: SyncChannel): Boolean {
+        val text = store.readCachedText(channel) ?: return false
+        val refs = mutableListOf<String>()
+        runCatching {
+            val root = Json.parseToJsonElement(text).jsonObject
+            (root["apps"]?.jsonObject ?: root).values.take(5).forEach { v ->
+                val o = v.jsonObject
+                (o["icon"]?.jsonPrimitive?.contentOrNull)
+                    ?.takeIf { it.startsWith(ASSETS_PREFIX) }
+                    ?.let { refs += it.removePrefix(ASSETS_PREFIX) }
+                (o["readme"]?.jsonPrimitive?.contentOrNull)
+                    ?.takeIf { it.startsWith(ASSETS_PREFIX) }
+                    ?.let { refs += it.removePrefix(ASSETS_PREFIX) }
+            }
+        }
+        if (refs.isEmpty()) return false
+        return refs.any { !store.assetFile(it).exists() }
     }
 
     private fun serializeIndex(index: AppIndex): String {

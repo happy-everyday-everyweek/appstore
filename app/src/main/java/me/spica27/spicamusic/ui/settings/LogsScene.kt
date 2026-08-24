@@ -79,7 +79,7 @@ class LogsScene : StackScene() {
                     val text = DebugLog.text()
                     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     cm.setPrimaryClip(ClipData.newPlainText("appstore-log", text))
-                    Toast.makeText(context, "日志已复制（${text.lines().size} 行）", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "已复制 ${text.lines().size} 行日志", Toast.LENGTH_SHORT).show()
                 }) { Text("复制日志") }
                 Button(onClick = {
                     val file = DebugLog.exportFile(context)

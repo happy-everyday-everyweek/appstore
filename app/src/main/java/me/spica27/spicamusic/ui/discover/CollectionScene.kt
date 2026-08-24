@@ -80,7 +80,7 @@ class CollectionScene(
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "集合内应用尚未同步（id: ${card.appIds.joinToString(", ")}）",
+                        text = "集合内应用尚未同步，请稍后重试",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

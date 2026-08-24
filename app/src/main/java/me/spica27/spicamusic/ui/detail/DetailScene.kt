@@ -1,12 +1,19 @@
 package me.spica27.spicamusic.ui.detail
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,17 +21,22 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,10 +47,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.spica27.navkit.path.LocalNavigationPath
@@ -47,10 +64,12 @@ import me.spica27.spicamusic.R
 import me.spica27.spicamusic.common.entity.appstore.AppMeta
 import me.spica27.spicamusic.ui.components.AppIcon
 import me.spica27.spicamusic.ui.components.OpenSourceTag
+import me.spica27.spicamusic.ui.components.SpeedChart
 import me.spica27.spicamusic.ui.components.TagChip
 import me.spica27.spicamusic.ui.components.gradeColors
 import me.spica27.spicamusic.ui.discover.MarkdownPlain
 import me.spica27.spicamusic.ui.home.StoreViewModel
+import me.spica27.spicamusic.ui.home.StoreViewModel.DownloadTaskUi
 import org.koin.compose.viewmodel.koinActivityViewModel
 
 /**
@@ -84,16 +103,14 @@ fun DetailScreen(app: AppMeta) {
     // 上游应用（upstream 指向的系统 ID 解析）
     val upstreamApp = app.upstreamId?.let { viewModel.appById(it) }
 
-    // 全面屏适配：全屏详情页避开状态栏与系统导航条；实色背景避免转场露出黑边
+    // 全面屏适配：全屏详情页背景铺满含状态栏（图标模糊打底），顶部渐变遮罩压平状态栏色差
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .statusBarsPadding()
-                .navigationBarsPadding(),
+                .background(MaterialTheme.colorScheme.background),
     ) {
-        // 背景：图标模糊铺底
+        // 背景：图标模糊铺底（延伸到状态栏下方，无白条）
         if (app.icon.isNotBlank()) {
             me.spica27.spicamusic.ui.components
                 .StoreAsyncIconBackground(url = app.icon)
@@ -104,6 +121,37 @@ fun DetailScreen(app: AppMeta) {
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.55f)),
         )
+        // 顶部渐变遮罩（黑→透明），压平状态栏区域与内容的过渡
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent),
+                        ),
+                    ),
+        )
+
+        // 悬浮返回按钮（独立于滚动内容，避让状态栏）
+        androidx.compose.material3.IconButton(
+            onClick = { path.popTop() },
+            modifier =
+                Modifier
+                    .align(Alignment.TopStart)
+                    .statusBarsPadding()
+                    .padding(8.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.35f)),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                tint = Color.White,
+            )
+        }
 
         // 内容
         Column(
@@ -112,22 +160,9 @@ fun DetailScreen(app: AppMeta) {
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
         ) {
-            // 返回按钮
-            IconButton(
-                onClick = { path.popTop() },
-                modifier =
-                    Modifier
-                        .padding(8.dp)
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.3f)),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                    tint = Color.White,
-                )
-            }
+            // 顶部占位（状态栏 + 悬浮返回按钮高度，内容滚动时不遮挡）
+            Spacer(modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars))
+            Spacer(modifier = Modifier.height(56.dp))
 
             // 图标
             Box(
@@ -221,6 +256,34 @@ fun DetailScreen(app: AppMeta) {
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
+                    if (app.apkUrl.isNotBlank()) {
+                        androidx.compose.foundation.text.ClickableText(
+                            text =
+                                androidx.compose.ui.text.buildAnnotatedString {
+                                    append("APK 来源直链：${app.apkUrl}")
+                                    addStyle(
+                                        androidx.compose.ui.text.SpanStyle(
+                                            color = Color.White.copy(alpha = 0.85f),
+                                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                                        ),
+                                        0,
+                                        length,
+                                    )
+                                },
+                            style = MaterialTheme.typography.bodySmall.copy(textAlign = TextAlign.Center),
+                            modifier = Modifier.padding(top = 4.dp),
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(app.apkUrl),
+                                        ),
+                                    )
+                                }
+                            },
+                        )
+                    }
                 }
             }
 
@@ -284,8 +347,8 @@ fun DetailScreen(app: AppMeta) {
                     Text(
                         text =
                             buildString {
-                                append("README 已随应用收录并存档于承载仓库（随包同步中）；全文可前往开发者仓库查看：\n")
-                                append("github.com/").append(app.repo.ifBlank { "（仓库信息同步中）" })
+                                append("README 已随应用收录并存档于承载仓库，同步完成后即可阅读全文；也可前往开发者仓库查看：\n")
+                                append("github.com/").append(app.repo.ifBlank { "仓库信息同步中" })
                             },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -298,7 +361,7 @@ fun DetailScreen(app: AppMeta) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (app.specialPermissions.isEmpty()) {
                         Text(
-                            text = "无特殊权限（none）",
+                            text = "无特殊权限",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -313,7 +376,7 @@ fun DetailScreen(app: AppMeta) {
                     }
                     if (app.permissions.isNotEmpty()) {
                         Text(
-                            text = "完整权限清单（取自 APK 解包）：",
+                            text = "完整权限清单：",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
@@ -335,7 +398,7 @@ fun DetailScreen(app: AppMeta) {
         // 悬浮下载按钮（经 GitLink 下载底座直连开发者 Release）
         ExtendedFloatingActionButton(
             onClick = { viewModel.downloadApk(context, app) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).navigationBarsPadding(),
             containerColor = MaterialTheme.colorScheme.tertiary,
             contentColor = MaterialTheme.colorScheme.onTertiary,
             icon = {
@@ -348,6 +411,102 @@ fun DetailScreen(app: AppMeta) {
                 Text(text = stringResource(R.string.detail_download))
             },
         )
+
+        // 下载状态横条弹窗（参考工程「下载下弹窗」：进度/速度/高采样折线图）
+        val task by viewModel.downloadTask.collectAsStateWithLifecycle()
+        AnimatedVisibility(
+            visible = task != null,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(tween(240)),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(200)),
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
+        ) {
+            task?.let { DownloadMiniSheet(task = it, onClose = { viewModel.dismissDownloadTask() }) }
+        }
+    }
+}
+
+/** 下载横条弹窗：文件名 / 进度条 / 瞬时速度与百分比 / 高采样速度折线图 */
+@Composable
+private fun DownloadMiniSheet(
+    task: DownloadTaskUi,
+    onClose: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 10.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = task.fileName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                LinearProgressIndicator(
+                    progress = { task.progress },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "速度 ${formatSpeed(task.speedHistory.lastOrNull())}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "${(task.progress * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Text(
+                        text = task.status,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                SpeedChart(
+                    history = task.speedHistory,
+                    color = MaterialTheme.colorScheme.primary,
+                    gridColor = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+            }
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.padding(start = 8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/** 瞬时速度格式化：B/s -> KB/s -> MB/s */
+private fun formatSpeed(speedBps: Long?): String {
+    val v = speedBps ?: 0L
+    return when {
+        v >= 1024L * 1024L -> String.format("%.1f MB/s", v / 1024f / 1024f)
+        v >= 1024L -> String.format("%.1f KB/s", v / 1024f)
+        else -> "$v B/s"
     }
 }
 

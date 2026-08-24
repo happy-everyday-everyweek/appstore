@@ -39,6 +39,18 @@ class StoreViewModel(
     private val _downloading = MutableStateFlow(false)
     val downloading: StateFlow<Boolean> = _downloading.asStateFlow()
 
+    /** APK 下载任务实时状态（横条弹窗展示：进度/高采样速度折线图/状态） */
+    data class DownloadTaskUi(
+        val fileName: String = "",
+        val progress: Float = 0f,
+        val speedHistory: List<Long> = emptyList(), // 瞬时速度 B/s（高采样）
+        val status: String = "准备中…",
+        val done: Boolean = false,
+    )
+
+    private val _downloadTask = MutableStateFlow<DownloadTaskUi?>(null)
+    val downloadTask: StateFlow<DownloadTaskUi?> = _downloadTask.asStateFlow()
+
     private val _lastDownload = MutableStateFlow<String?>(null)
     val lastDownload: StateFlow<String?> = _lastDownload.asStateFlow()
 
@@ -56,32 +68,74 @@ class StoreViewModel(
     /** 应用详情页依赖：按 id 查应用；upstream 跳转用 */
     fun appById(id: String?): AppMeta? = repository.apps.value[id]
 
-    /** APK 下载：GitLink 下载底座直连开发者 Release，校验 SHA-256 后进入系统安装界面 */
+    /** APK 下载：GitLink 下载底座直连开发者 Release，校验 SHA-256 后进入系统安装界面；
+     *  实时上报高采样速度（每 150ms 一个采样点，最多保留 90 点）供折线图绘制 */
     fun downloadApk(
         context: Context,
         app: AppMeta,
     ) {
         if (app.apkUrl.isBlank()) {
             _lastDownload.value = "该应用暂无可下载的 APK（待采集）"
+            _downloadTask.value = DownloadTaskUi(fileName = app.name, status = "暂无可下载的 APK", done = true)
             return
         }
         if (_downloading.value) return
         viewModelScope.launch {
             _downloading.value = true
+            val fileName = "${app.name.ifBlank { app.packageName }}_${app.version.releaseTag}.apk"
+            _downloadTask.value =
+                DownloadTaskUi(fileName = fileName, status = "正在测速挑选最快镜像…")
+            var lastSampleMs = 0L
+            var lastSampleBytes = 0L
+            val history = mutableListOf<Long>()
             try {
                 val dir = File(context.getExternalFilesDir(null), "downloads")
-                val fileName = "${app.name.ifBlank { app.packageName }}_${app.version.releaseTag}.apk"
+                dir.mkdirs()
+                val dest = File(dir, fileName)
                 val file =
                     withContext(Dispatchers.IO) {
                         downloader.download(
                             url = app.apkUrl,
-                            dest = File(dir, fileName),
+                            dest = dest,
                             expectedSha256 = app.apkSha256.ifBlank { null },
+                            onProgress = { progress ->
+                                // 高采样：按落盘字节差 / 时间窗（150ms）计算瞬时真实速率
+                                val now = System.currentTimeMillis()
+                                val bytes = if (dest.exists()) dest.length() else 0L
+                                if (lastSampleMs == 0L) {
+                                    lastSampleMs = now
+                                    lastSampleBytes = bytes
+                                } else if (now - lastSampleMs >= 150L) {
+                                    val dtMs = (now - lastSampleMs).coerceAtLeast(1L)
+                                    val speedBps = (bytes - lastSampleBytes).coerceAtLeast(0L) * 1000L / dtMs
+                                    lastSampleMs = now
+                                    lastSampleBytes = bytes
+                                    history.add(speedBps)
+                                    if (history.size > 90) history.removeAt(0)
+                                    _downloadTask.value =
+                                        _downloadTask.value?.copy(
+                                            progress = progress,
+                                            speedHistory = history.toList(),
+                                            status = "下载中",
+                                        )
+                                }
+                            },
                         )
                     }
+                _downloadTask.value =
+                    _downloadTask.value?.copy(
+                        progress = 1f,
+                        status = "下载完成，正在打开安装器…",
+                        done = true,
+                    )
                 _lastDownload.value = "已保存：${file.absolutePath}"
                 promptInstall(context, file)
             } catch (e: Exception) {
+                _downloadTask.value =
+                    _downloadTask.value?.copy(
+                        status = "下载失败：${e.message ?: e::class.simpleName}",
+                        done = true,
+                    )
                 _lastDownload.value = "下载失败：${e.message}"
             } finally {
                 _downloading.value = false
@@ -146,6 +200,11 @@ class StoreViewModel(
     fun consumeDownloadMessage(onConsumed: () -> Unit) {
         _lastDownload.value = null
         onConsumed()
+    }
+
+    /** 关闭下载横条弹窗（下载任务继续在后台执行，仅在完成态/失败态关闭后不再显示） */
+    fun dismissDownloadTask() {
+        _downloadTask.value = null
     }
 
     /** 关闭当前同步失败横幅（仅本次展示） */
