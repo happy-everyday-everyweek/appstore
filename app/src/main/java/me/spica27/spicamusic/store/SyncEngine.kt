@@ -7,7 +7,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.parseToJsonElement
 import me.spica27.spicamusic.common.entity.appstore.AppIndex
 import me.spica27.spicamusic.common.entity.appstore.AppIndexParser
 import me.spica27.spicamusic.common.entity.appstore.AppMeta
