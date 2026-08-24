@@ -55,7 +55,7 @@ fun LibraryScene(onOpenSearch: () -> Unit) {
         )
         StoreSearchBar(
             onClick = onOpenSearch,
-            modifier = Modifier.padding(horizontal = 16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         )
         LazyColumn(
             modifier = Modifier.fillMaxSize(),

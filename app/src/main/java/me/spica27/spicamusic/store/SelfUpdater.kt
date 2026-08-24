@@ -1,8 +1,15 @@
 package me.spica27.spicamusic.store
 
+import android.content.Context
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import me.spica27.spicamusic.common.entity.appstore.PatchManifestParser
+import java.io.File
+
 /**
- * 客户端自身更新（独立于商店收录）：
- * 内置自身仓库地址，静默比较最新 Release tag 与本地版本。
+ * 客户端自身更新（GitLink 直链模式，零 GitHub API）：
+ * 每个发行版都带 patch.json（更新路径解析）——直接经 GitLink 下载它，
+ * 读 target 与本地版本比较即可判定是否有新版本；下载更新同样走 GitLink 镜像。
  */
 interface SelfUpdater {
     suspend fun check(): UpdateInfo?
@@ -15,19 +22,32 @@ data class UpdateInfo(
 )
 
 class SelfUpdaterImpl(
-    private val github: GitHubReleaseClient,
+    private val downloader: Downloader,
+    appContext: Context,
     private val currentVersionName: String,
     private val ownRepo: String = "happy-everyday-everyweek/appstore",
 ) : SelfUpdater {
-    override suspend fun check(): UpdateInfo? {
-        val release = github.latestRelease(ownRepo) ?: return null
-        val tag = release.tag.removePrefix("v")
-        if (tag == currentVersionName || tag.isBlank()) return null
-        val apk = release.assets.firstOrNull { it.name.endsWith(".apk") } ?: return null
-        return UpdateInfo(
-            versionName = tag,
-            downloadUrl = apk.downloadUrl,
-            releaseUrl = "https://github.com/$ownRepo/releases/tag/${release.tag}",
-        )
-    }
+    private val cacheDir: File = appContext.cacheDir
+
+    override suspend fun check(): UpdateInfo? =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val tmp = File(cacheDir, "self-update-patch.json")
+                val f =
+                    downloader.download(
+                        "https://github.com/$ownRepo/releases/latest/download/patch.json",
+                        tmp,
+                        null,
+                    )
+                val patch = PatchManifestParser.parse(f.readText()) ?: return@runCatching null
+                f.delete()
+                val tag = patch.target?.removePrefix("v").orEmpty()
+                if (tag.isBlank() || tag == currentVersionName) return@runCatching null
+                UpdateInfo(
+                    versionName = tag,
+                    downloadUrl = "https://github.com/$ownRepo/releases/latest/download/app-release.apk",
+                    releaseUrl = "https://github.com/$ownRepo/releases/tag/${patch.target}",
+                )
+            }.getOrNull()
+        }
 }

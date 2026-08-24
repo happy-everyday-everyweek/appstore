@@ -36,11 +36,22 @@ jobs:
           echo "tag=v$V.$M.$B" >> "$GITHUB_OUTPUT"
           echo "ver=$V.$M.$B" >> "$GITHUB_OUTPUT"
 
+      - name: 生成增量解析清单 patch.json
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          # 上一发行版 tag（latest 重定向解析；无则 base=none）
+          BASE=$(curl -sL -o /dev/null -w '%{url_effective}' "https://github.com/${{ github.repository }}/releases/latest" 2>/dev/null | sed -n 's#.*/releases/tag/##p' || true)
+          [ -z "$BASE" ] || [ "$BASE" = "https://github.com/${{ github.repository }}/releases/latest" ] && BASE="none"
+          echo "{\"base\":\"$BASE\",\"target\":\"$TAG\",\"algorithm\":\"structured-json-v1\"}" > patch.json
+          cat patch.json
+
       - name: 发布 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
           name: 应用市场 v${{ steps.ver.outputs.ver }}
-          files: app/build/outputs/apk/release/app-release.apk
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+            patch.json
           generate_release_notes: true
           fail_on_unmatched: false

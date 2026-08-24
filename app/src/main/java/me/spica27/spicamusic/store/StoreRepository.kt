@@ -39,6 +39,10 @@ class StoreRepository(
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
+    /** 同步下载进度（首启/兜底全量等前台场景用于展示；空闲为 null） */
+    private val _downloadProgress = MutableStateFlow<Float?>(null)
+    val downloadProgress: StateFlow<Float?> = _downloadProgress.asStateFlow()
+
     /** 启动时：先读本地缓存（离线可用）；缓存为空（首启）走前台全量，否则后台静默增量 */
     suspend fun bootstrap() {
         reloadFromCache()
@@ -52,6 +56,7 @@ class StoreRepository(
             }
         } finally {
             _syncing.value = false
+            _downloadProgress.value = null
         }
         reloadFromCache()
     }
@@ -63,17 +68,18 @@ class StoreRepository(
             refreshInternal()
         } finally {
             _syncing.value = false
+            _downloadProgress.value = null
         }
         reloadFromCache()
     }
 
     private suspend fun refreshInternal() {
+        engine.onProgress = { _downloadProgress.value = it }
+        DebugLog.i("Sync", "开始静默增量同步（${SyncChannel.AppIndex.repo} / ${SyncChannel.Discover.repo}）")
         val r1 = engine.sync(SyncChannel.AppIndex, SyncMode.Auto)
         val r2 = engine.sync(SyncChannel.Discover, SyncMode.Auto)
-        _lastError.value =
-            listOfNotNull(r1.error, r2.error)
-                .takeIf { it.isNotEmpty() }
-                ?.joinToString("；") { it.describe() }
+        _lastError.value = syncErrorOf(r1) ?: syncErrorOf(r2)
+        if (_lastError.value == null) DebugLog.i("Sync", "双通道同步完成")
     }
 
     /** 首次使用/损坏兜底：前台全量 */
@@ -83,18 +89,25 @@ class StoreRepository(
             forceFullInternal()
         } finally {
             _syncing.value = false
+            _downloadProgress.value = null
         }
         reloadFromCache()
     }
 
     private suspend fun forceFullInternal() {
+        engine.onProgress = { _downloadProgress.value = it }
         val r1 = engine.sync(SyncChannel.AppIndex, SyncMode.Full)
         val r2 = engine.sync(SyncChannel.Discover, SyncMode.Full)
-        _lastError.value =
-            listOfNotNull(r1.error, r2.error)
-                .takeIf { it.isNotEmpty() }
-                ?.joinToString("；") { it.describe() }
+        _lastError.value = syncErrorOf(r1) ?: syncErrorOf(r2)
     }
+
+    /** 关闭当前同步失败横幅（仅本次会话展示） */
+    fun consumeError() {
+        _lastError.value = null
+    }
+
+    /** 详细错误优先 errorMessage（含 URL/镜像原因），其次枚举描述 */
+    private fun syncErrorOf(r: SyncResult): String? = if (r.error == null) null else (r.errorMessage ?: r.error.describe())
 
     /** 客户端自身更新检查（独立于双通道） */
     suspend fun checkSelfUpdate(updater: SelfUpdater) {
@@ -104,9 +117,11 @@ class StoreRepository(
     fun reloadFromCache() {
         store.readCachedText(SyncChannel.AppIndex)?.let {
             runCatching { _apps.value = AppIndexParser.parse(it) }
+                .onFailure { e -> DebugLog.e("Sync", "AppIndex 缓存解析失败: ${e.message} 内容=${it.take(120)}") }
         }
         store.readCachedText(SyncChannel.Discover)?.let {
             runCatching { _cards.value = DiscoverIndexParser.parse(it) }
+                .onFailure { e -> DebugLog.e("Sync", "Discover 缓存解析失败: ${e.message} 内容=${it.take(120)}") }
         }
         _syncVersions.value =
             SyncVersions(

@@ -41,6 +41,7 @@ class GitLinkDownloader(
         onProgress: (Float) -> Unit,
     ): File {
         val ranked = rankMirrors(url)
+        val attempts = mutableListOf<String>()
         var lastErr: Throwable = IOException("无可用镜像")
         for (mirror in ranked) {
             try {
@@ -58,10 +59,13 @@ class GitLinkDownloader(
                 return file
             } catch (e: Exception) {
                 lastErr = e
+                attempts += "${mirror.name}:${e.message ?: e::class.simpleName}"
                 dest.delete()
             }
         }
-        throw lastErr
+        // 聚合所有镜像失败原因，方便用户/诊断定位
+        val detail = attempts.joinToString("；")
+        throw IOException("镜像全部失败（${ranked.size} 个镜像）：$detail", lastErr)
     }
 
     /**

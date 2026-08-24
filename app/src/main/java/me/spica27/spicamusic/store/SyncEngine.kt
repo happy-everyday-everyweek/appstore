@@ -17,101 +17,130 @@ import java.io.File
 import java.util.zip.ZipInputStream
 
 /**
- * 市场同步引擎（深层模块，单入口）：
- * 检查 Release → 解析清单 → 增量/全量下载 → 补丁应用 → 校验 → 缓存。
- *
- * 契约（与工作流 4 / 推荐仓库发布物对齐）：
- * - full.zip 内含 index.json
- * - incremental.zip 内含 incremental.json（addedOrChanged / removed）
- * - patch.json 记录 base/target/algorithm/校验和
- *
- * 不变量：Auto 模式由调用方在后台协程执行、绝不阻塞 UI；
- * Full 模式返回前数据已落盘；重复调用幂等（无变更返回 applied=None）；
- * 异常路径均以 SyncResult.error 返回可读错误，不抛未捕获异常。
+ * 市场同步引擎（全 GitLink 直链模式，零 GitHub API）：
+ * - Release 发现 = "/releases/latest/download/patch.json" 直链（GitHub 官方 latest 重定向）
+ * - 增量包 / 全量包 = 同域名直链资产
+ * - 下载全部经 [Downloader]（GitLink 33 镜像测速、断点续传、空文件换源）
+ * - 生命周期埋点进 [DebugLog]，失败携带 errorMessage（URL/镜像/解析详情）
  */
 class SyncEngine(
-    private val github: GitHubReleaseClient,
     private val downloader: Downloader,
     private val store: SyncStore,
 ) {
+    /** 下载进度回调（0f~1f；一次同步内多次资产下载会刷新） */
+    var onProgress: ((Float) -> Unit)? = null
+
     suspend fun sync(
         channel: SyncChannel,
         mode: SyncMode = SyncMode.Auto,
     ): SyncResult {
-        val release =
-            github.latestRelease(channel.repo)
-                ?: return SyncResult(changed = false, applied = null, error = SyncError.Network)
+        val baseUrl = "https://github.com/${channel.repo}/releases/latest/download"
         val last = store.readVersion(channel)
-        if (release.tag == last && store.cacheFile(channel).exists()) {
+        DebugLog.i("Sync", "[${channel.name}] 直链源=$baseUrl 本地版本=$last 模式=$mode")
+        val patchText =
+            try {
+                downloadAsset(channel, "$baseUrl/patch.json", "patch.json").also {
+                    DebugLog.i("Sync", "[${channel.name}] patch.json 已获取（${it.length} 字节）")
+                }
+            } catch (e: Exception) {
+                val msg = "拉取更新解析清单失败（$baseUrl/patch.json）：${e.message ?: e::class.simpleName}"
+                DebugLog.e("Sync", "[${channel.name}] $msg")
+                return SyncResult(
+                    changed = false,
+                    applied = null,
+                    error = SyncError.Network,
+                    errorMessage = msg,
+                )
+            }
+        val patch =
+            runCatching { PatchManifestParser.parse(patchText) }.getOrNull()
+                ?: run {
+                    val preview = patchText.take(120).replace('\n', ' ')
+                    val msg = "更新解析清单（patch.json）解析失败：前 120 字「$preview」"
+                    DebugLog.e("Sync", "[${channel.name}] $msg")
+                    return SyncResult(
+                        changed = false,
+                        applied = null,
+                        error = SyncError.ManifestInvalid,
+                        errorMessage = msg,
+                    )
+                }
+        DebugLog.i(
+            "Sync",
+            "[${channel.name}] 清单: base=${patch.base} target=${patch.target} algo=${patch.algorithm}",
+        )
+        // target 为空（历史 Release 数据缺失）时不得判定“无更新”，必须走全量
+        if (!patch.target.isNullOrBlank() && patch.target == last && store.cacheFile(channel).exists()) {
+            DebugLog.i("Sync", "[${channel.name}] 版本一致，无需更新")
             return SyncResult(changed = false, applied = PackageKind.None)
         }
-
-        val patchAsset = release.asset(PATCH_JSON)
-        val patch: PatchManifest? =
-            patchAsset?.let {
-                runCatching { PatchManifestParser.parse(downloadAsset(channel, it.downloadUrl, "patch.json")) }
-                    .getOrNull()
-            }
-        if (patch == null && patchAsset != null) {
-            return SyncResult(changed = false, applied = null, error = SyncError.ManifestInvalid)
-        }
-
-        val canIncremental =
-            patch != null &&
-                patch.base == last &&
-                patch.algorithm == ALGORITHM &&
-                release.asset(INCREMENTAL_ZIP) != null
+        val canIncremental = patch.base == last && patch.algorithm == ALGORITHM
+        DebugLog.i("Sync", "[${channel.name}] 选择 ${if (canIncremental) "增量" else "全量"}包")
         return if (canIncremental) {
-            applyIncremental(channel, release, patch!!)
+            applyIncremental(channel, baseUrl, patch)
         } else {
-            applyFull(channel, release, patch)
+            applyFull(channel, baseUrl, patch)
         }
     }
 
     private suspend fun applyIncremental(
         channel: SyncChannel,
-        release: ReleaseInfo,
+        baseUrl: String,
         patch: PatchManifest,
     ): SyncResult {
-        val incAsset = release.asset(INCREMENTAL_ZIP) ?: return applyFull(channel, release, patch)
+        if (patch.incrementalSha256.isBlank()) return applyFull(channel, baseUrl, patch)
         return runCatching {
-            val zip = downloader.download(incAsset.downloadUrl, tmpFile(channel, "inc.zip"), patch.incrementalSha256)
+            val zip =
+                downloader.download(
+                    "$baseUrl/incremental.zip",
+                    tmpFile(channel, "inc.zip"),
+                    patch.incrementalSha256.takeIf { it.isNotBlank() },
+                    onProgress = { onProgress?.invoke(it) },
+                )
             val entries = unzipAll(zip)
             val incrementalJson =
                 entries["incremental.json"]
                     ?: throw IllegalStateException("增量包缺 incremental.json")
             val base = AppIndexParser.parse(store.readCachedText(channel) ?: "")
             val change = parseIncremental(incrementalJson.decodeToString())
-            var merged = ChangeDetector.apply(base, change)
-            // 若增量引用了缓存中不存在的 id（异常数据），回退全量
+            val merged = ChangeDetector.apply(base, change)
             if (merged.size < base.size - change.removed.size) {
                 zip.delete()
-                return applyFull(channel, release, patch)
+                return applyFull(channel, baseUrl, patch)
             }
             store.writeCachedText(channel, serializeIndex(merged))
             store.writeAssets(entries.filterKeys { it.startsWith(ASSETS_PREFIX) })
-            store.writeVersion(channel, release.tag)
+            store.writeVersion(channel, patch.target ?: patch.base ?: "")
             zip.delete()
             SyncResult(changed = true, applied = PackageKind.Incremental)
         }.getOrElse { e ->
-            SyncResult(changed = false, applied = null, error = errorOf(e))
+            // 增量包获取/解析/校验失败一律兜底全量（保证同步不空转、数据一致）；
+            // 若全量也失败，把增量原因一并透传，便于定位真实故障
+            DebugLog.i("Sync", "[${channel.name}] 增量失败(${e.message})，回退全量")
+            val full = applyFull(channel, baseUrl, patch)
+            if (full.error == null) {
+                full
+            } else {
+                full.copy(
+                    errorMessage =
+                        "增量包失败(${e.message ?: e::class.simpleName})，且全量包失败：${full.errorMessage}",
+                )
+            }
         }
     }
 
     private suspend fun applyFull(
         channel: SyncChannel,
-        release: ReleaseInfo,
-        patch: PatchManifest?,
-    ): SyncResult {
-        val fullAsset =
-            release.asset(FULL_ZIP)
-                ?: return SyncResult(changed = false, applied = null, error = SyncError.PackageInvalid)
-        return runCatching {
+        baseUrl: String,
+        patch: PatchManifest,
+    ): SyncResult =
+        runCatching {
             val zip =
                 downloader.download(
-                    fullAsset.downloadUrl,
+                    "$baseUrl/full.zip",
                     tmpFile(channel, "full.zip"),
-                    patch?.fullSha256,
+                    patch.fullSha256.takeIf { it.isNotBlank() },
+                    onProgress = { onProgress?.invoke(it) },
                 )
             val entries = unzipAll(zip)
             val indexText =
@@ -119,20 +148,24 @@ class SyncEngine(
                     ?: throw IllegalStateException("全量包缺 index.json")
             store.writeCachedText(channel, indexText)
             store.writeAssets(entries.filterKeys { it.startsWith(ASSETS_PREFIX) })
-            store.writeVersion(channel, release.tag)
+            store.writeVersion(channel, patch.target ?: patch.base ?: "")
             zip.delete()
             SyncResult(changed = true, applied = PackageKind.Full)
         }.getOrElse { e ->
-            SyncResult(changed = false, applied = null, error = errorOf(e))
+            SyncResult(
+                changed = false,
+                applied = null,
+                error = errorOf(e),
+                errorMessage = "全量包处理失败：${e.message ?: e::class.simpleName}",
+            )
         }
-    }
 
     private suspend fun downloadAsset(
         channel: SyncChannel,
         url: String,
         name: String,
     ): String {
-        val f = downloader.download(url, tmpFile(channel, name), null)
+        val f = downloader.download(url, tmpFile(channel, name), null, onProgress = { onProgress?.invoke(it) })
         val text = f.readText()
         f.delete()
         return text

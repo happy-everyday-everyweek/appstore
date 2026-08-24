@@ -3,8 +3,6 @@ package me.spica27.spicamusic.di
 import me.spica27.spicamusic.BuildConfig
 import me.spica27.spicamusic.core.preferences.PreferencesManager
 import me.spica27.spicamusic.store.Downloader
-import me.spica27.spicamusic.store.GitHubReleaseClient
-import me.spica27.spicamusic.store.GitHubReleaseClientImpl
 import me.spica27.spicamusic.store.SelfUpdater
 import me.spica27.spicamusic.store.SelfUpdaterImpl
 import me.spica27.spicamusic.store.StoreRepository
@@ -12,12 +10,10 @@ import me.spica27.spicamusic.store.SyncEngine
 import me.spica27.spicamusic.store.SyncStore
 import me.spica27.spicamusic.store.gitlink.GitLinkDownloader
 import me.spica27.spicamusic.ui.home.StoreViewModel
-import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 import java.io.File
-import java.util.concurrent.TimeUnit
 
 /**
  * App 模块的依赖注入配置：商店数据层（GitHub 同步 + 下载底座）与页面 ViewModel。
@@ -27,18 +23,6 @@ object AppModule {
         module {
             // PreferencesManager
             single { PreferencesManager(androidContext()) }
-
-            // 网络客户端（GitLink 下载底座 + GitHub Release 查询共用）
-            single<OkHttpClient> {
-                OkHttpClient
-                    .Builder()
-                    .connectTimeout(20, TimeUnit.SECONDS)
-                    .readTimeout(60, TimeUnit.SECONDS)
-                    .build()
-            }
-
-            // GitHub Release 查询（唯一对外 API 面）
-            single<GitHubReleaseClient> { GitHubReleaseClientImpl(get()) }
 
             // 下载底座（GitLink 移植：33 镜像智能测速 / 断点续传 / 空文件换源 / SHA-256）
             single<Downloader> { GitLinkDownloader() }
@@ -50,12 +34,16 @@ object AppModule {
                 }
             }
 
-            // 市场同步引擎（双通道：聚合包 + 推荐包）
-            single<SyncEngine> { SyncEngine(get(), get(), get()) }
+            // 市场同步引擎（全 GitLink 直链模式：git hub.com 直链资产，零 API）
+            single<SyncEngine> { SyncEngine(get(), get()) }
 
-            // 客户端自身更新（独立于商店收录）
+            // 客户端自身更新（独立于商店收录；GitLink 直链 patch.json 判定版本）
             single<SelfUpdater> {
-                SelfUpdaterImpl(github = get(), currentVersionName = BuildConfig.VERSION_NAME)
+                SelfUpdaterImpl(
+                    downloader = get(),
+                    appContext = androidContext(),
+                    currentVersionName = BuildConfig.VERSION_NAME,
+                )
             }
 
             // 商店数据仓库（StateFlow 数据源）

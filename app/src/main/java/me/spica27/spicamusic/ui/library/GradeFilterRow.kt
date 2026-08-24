@@ -23,7 +23,8 @@ fun GradeFilterRow(
             Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp, vertical = 10.dp),
+                // 左边缘与顶部搜索框对齐（16dp），右侧留 12dp 呼吸
+                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
     ) {
         FilterChip(
             selected = selected == null,

@@ -33,6 +33,7 @@ class StoreViewModel(
     val syncState: StateFlow<StoreRepository.SyncVersions> = repository.syncVersions
     val syncing: StateFlow<Boolean> = repository.syncing
     val lastSyncError: StateFlow<String?> = repository.lastError
+    val downloadProgress: StateFlow<Float?> = repository.downloadProgress
 
     private val _downloading = MutableStateFlow(false)
     val downloading: StateFlow<Boolean> = _downloading.asStateFlow()
@@ -144,6 +145,18 @@ class StoreViewModel(
     fun consumeDownloadMessage(onConsumed: () -> Unit) {
         _lastDownload.value = null
         onConsumed()
+    }
+
+    /** 关闭当前同步失败横幅（仅本次展示） */
+    fun consumeSyncError() {
+        repository.consumeError()
+    }
+
+    /** 首启同步失败后的重试（前台全量） */
+    fun retryBootstrap() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { repository.bootstrap() }
+        }
     }
 
     /** 客户端自身更新下载（GitLink 镜像加速）→ 校验后拉起安装 */

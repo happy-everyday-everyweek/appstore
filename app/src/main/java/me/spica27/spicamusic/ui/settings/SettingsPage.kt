@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Icon
@@ -28,6 +29,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -48,6 +54,15 @@ fun SettingsPage() {
     val updateAvailable by viewModel.updateAvailable.collectAsStateWithLifecycle()
     val syncing by viewModel.syncing.collectAsStateWithLifecycle()
     val lastError by viewModel.lastSyncError.collectAsStateWithLifecycle()
+    val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
+    // 调试模式（版本号连点 5 次开启）；日志页与调试实验室入口
+    val path = me.spica27.navkit.path.LocalNavigationPath.current
+    val homeViewModel: me.spica27.spicamusic.ui.home.HomeViewModel =
+        org.koin.compose.koinInject()
+    var debugModeState by remember { mutableStateOf(false) }
+
+    // 调试实验室：详情页自定义内容输入
+    var debugAppId by remember { mutableStateOf("") }
 
     LaunchedEffect(updateAvailable) {
         updateAvailable?.let {
@@ -111,6 +126,19 @@ fun SettingsPage() {
                 title = "推荐内容数据",
                 subtitle = syncState.discoverVersion ?: "尚未同步",
             )
+            SettingRow(
+                icon = Icons.Default.Refresh,
+                title = "立即同步",
+                subtitle = "经 GitLink 镜像拉取最新增量包",
+                action = { viewModel.refreshSilently(context) },
+                actionLabel = if (syncing) "同步中" else "同步",
+            )
+            downloadProgress?.let { progress ->
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
         }
 
         SettingsCard(title = "客户端自身更新") {
@@ -134,11 +162,45 @@ fun SettingsPage() {
         }
 
         SettingsCard(title = "关于") {
-            SettingRow(
-                icon = Icons.Default.Info,
-                title = "版本",
-                subtitle = BuildConfig.VERSION_NAME,
-            )
+            // 版本号：连续点击 5 次进入调试模式
+            var tapCount by remember { mutableIntStateOf(0) }
+            var lastTap by remember { mutableLongStateOf(0L) }
+            val debugMode by remember { mutableStateOf(false) }
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            val now = System.currentTimeMillis()
+                            if (now - lastTap > 2000) tapCount = 1 else tapCount++
+                            lastTap = now
+                            if (tapCount >= 5) {
+                                tapCount = 0
+                                Toast.makeText(context, "调试模式已开启", Toast.LENGTH_SHORT).show()
+                                debugModeState = true
+                            }
+                        }.padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 12.dp),
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "版本",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = BuildConfig.VERSION_NAME,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             SettingRow(
                 icon = Icons.AutoMirrored.Filled.OpenInNew,
                 title = "客户端源码仓库",
@@ -167,6 +229,77 @@ fun SettingsPage() {
                 },
                 actionLabel = "打开",
             )
+        }
+
+        SettingsCard(title = "开发者") {
+            SettingRow(
+                icon = Icons.Default.Info,
+                title = "应用日志",
+                subtitle = "查看 / 复制 / 导出同步与下载日志",
+                action = { path.push(LogsScene()) },
+                actionLabel = "打开",
+            )
+        }
+
+        if (debugModeState) {
+            SettingsCard(title = "调试实验室") {
+                SettingRow(
+                    icon = Icons.Default.Info,
+                    title = "推荐页",
+                    subtitle = "切到底栏「推荐」Tab",
+                    action = {
+                        homeViewModel.navigateToPage(me.spica27.spicamusic.ui.home.HomePage.Discover)
+                    },
+                    actionLabel = "跳转",
+                )
+                SettingRow(
+                    icon = Icons.Default.Info,
+                    title = "全部页",
+                    subtitle = "切到底栏「全部」Tab",
+                    action = {
+                        homeViewModel.navigateToPage(me.spica27.spicamusic.ui.home.HomePage.Library)
+                    },
+                    actionLabel = "跳转",
+                )
+                SettingRow(
+                    icon = Icons.Default.Info,
+                    title = "搜索页",
+                    subtitle = "打开搜索场景",
+                    action = {
+                        path.push(
+                            me.spica27.spicamusic.ui.search
+                                .SearchScene(),
+                        )
+                    },
+                    actionLabel = "跳转",
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.OutlinedTextField(
+                        value = debugAppId,
+                        onValueChange = { debugAppId = it.filter(Char::isDigit).take(6) },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("应用 ID（如 1047）") },
+                        singleLine = true,
+                    )
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            val meta = viewModel.appById(debugAppId)
+                            if (meta != null) {
+                                path.push(
+                                    me.spica27.spicamusic.ui.detail
+                                        .DetailScene(meta),
+                                )
+                            } else {
+                                Toast.makeText(context, "未找到应用 $debugAppId", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.padding(start = 8.dp),
+                    ) { Text("详情") }
+                }
+            }
         }
 
         Text(

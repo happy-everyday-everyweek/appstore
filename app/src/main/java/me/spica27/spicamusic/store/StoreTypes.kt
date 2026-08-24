@@ -19,6 +19,7 @@ data class SyncResult(
     val changed: Boolean,
     val applied: PackageKind?,
     val error: SyncError? = null,
+    val errorMessage: String? = null,
 ) {
     val isOk: Boolean get() = error == null
 }
@@ -34,10 +35,10 @@ enum class SyncError {
 
     fun describe(): String =
         when (this) {
-            Network -> "网络或 GitHub API 访问失败"
-            ManifestInvalid -> "增量补丁清单解析失败"
-            ChecksumMismatch -> "下载包 SHA-256 校验不一致"
-            PackageInvalid -> "同步包内容缺失或损坏"
+            Network -> "网络连接失败（GitHub 直链与全部镜像均不可达，具体原因见日志）"
+            ManifestInvalid -> "更新解析清单缺失或无效（patch.json 不存在或内容无法解析）"
+            ChecksumMismatch -> "下载包 SHA-256 校验不一致（数据可能被篡改或镜像缓存异常）"
+            PackageInvalid -> "同步包内容缺失、解压失败或结构不正确（见日志详情）"
             Storage -> "本地存储读写失败"
         }
 }
