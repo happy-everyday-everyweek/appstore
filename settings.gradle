@@ -9,12 +9,6 @@ pluginManagement {
     }
     mavenCentral()
     maven { url "https://jitpack.io" }
-    maven { url 'https://maven.aliyun.com/repository/central' }
-    maven { url 'https://maven.aliyun.com/repository/google' }
-    maven { url 'https://maven.aliyun.com/repository/public' }
-    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-    maven { url 'https://repo.huaweicloud.com/repository/maven/' }
-    maven { url 'https://repo.huaweicloud.com/repository/gradle-plugin/' }
     gradlePluginPortal()
   }
 }
@@ -25,10 +19,6 @@ dependencyResolutionManagement {
     mavenCentral()
     maven { url 	"https://repo1.maven.org/maven2/"}
     maven { url "https://jitpack.io" }
-    maven { url 'https://maven.aliyun.com/repository/central' }
-    maven { url 'https://maven.aliyun.com/repository/google' }
-    maven { url 'https://maven.aliyun.com/repository/public' }
-    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
   }
 }
 
