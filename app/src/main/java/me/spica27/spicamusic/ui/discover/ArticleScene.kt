@@ -1,5 +1,6 @@
 package me.spica27.spicamusic.ui.discover
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -47,8 +48,15 @@ class ArticleScene(
                     ?: "（正文尚未随包同步，请稍后重试）"
             }
 
-        // 全面屏适配：全屏文章页避开状态栏与系统导航条
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        // 全面屏适配：全屏文章页避开状态栏与系统导航条；实色背景避免转场露出黑边
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
+                    .statusBarsPadding()
+                    .navigationBarsPadding(),
+        ) {
             IconButton(
                 onClick = { path.popTop() },
                 modifier = Modifier.padding(6.dp),

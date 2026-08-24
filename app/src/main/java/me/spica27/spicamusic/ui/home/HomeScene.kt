@@ -41,6 +41,20 @@ class HomeScene : StackScene() {
         val context = LocalContext.current
         val storeViewModel: me.spica27.spicamusic.ui.home.StoreViewModel = koinActivityViewModel()
         val updateAvailable by storeViewModel.updateAvailable.collectAsStateWithLifecycle()
+        val lastSyncError by storeViewModel.lastSyncError.collectAsStateWithLifecycle()
+        val syncing by storeViewModel.syncing.collectAsStateWithLifecycle()
+
+        // 首次/前台同步失败提示（无本地缓存时启动后出错的显式告知）
+        LaunchedEffect(lastSyncError, syncing) {
+            if (!syncing && lastSyncError != null && storeViewModel.apps.value.isEmpty()) {
+                Toast
+                    .makeText(
+                        context,
+                        "首次同步失败：$lastSyncError",
+                        Toast.LENGTH_LONG,
+                    ).show()
+            }
+        }
         LaunchedEffect(updateAvailable) {
             updateAvailable?.let {
                 Toast

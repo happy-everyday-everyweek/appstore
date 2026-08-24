@@ -30,6 +30,16 @@ enum class SyncError {
     ChecksumMismatch, // SHA-256 校验不一致
     PackageInvalid, // 包内容缺失/解压失败
     Storage, // 本地读写失败
+    ;
+
+    fun describe(): String =
+        when (this) {
+            Network -> "网络或 GitHub API 访问失败"
+            ManifestInvalid -> "增量补丁清单解析失败"
+            ChecksumMismatch -> "下载包 SHA-256 校验不一致"
+            PackageInvalid -> "同步包内容缺失或损坏"
+            Storage -> "本地存储读写失败"
+        }
 }
 
 /** GitHub Release 资产描述（REST /releases/latest 资产项） */

@@ -33,30 +33,67 @@ class StoreRepository(
     private val _syncVersions = MutableStateFlow(SyncVersions())
     val syncVersions: StateFlow<SyncVersions> = _syncVersions.asStateFlow()
 
+    private val _syncing = MutableStateFlow(false)
+    val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
+
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+
     /** 启动时：先读本地缓存（离线可用）；缓存为空（首启）走前台全量，否则后台静默增量 */
     suspend fun bootstrap() {
         reloadFromCache()
         val hasLocal = _apps.value.isNotEmpty() || _cards.value.isNotEmpty()
-        if (hasLocal) {
-            refresh()
-        } else {
-            forceFull() // 首次使用：前台阻塞式全量下载（规范书定稿）
+        _syncing.value = true
+        try {
+            if (hasLocal) {
+                refreshInternal()
+            } else {
+                forceFullInternal() // 首次使用：前台阻塞式全量下载（规范书定稿）
+            }
+        } finally {
+            _syncing.value = false
         }
         reloadFromCache()
     }
 
     /** 开屏静默：双通道 Auto（调用方放后台协程） */
     suspend fun refresh() {
-        engine.sync(SyncChannel.AppIndex, SyncMode.Auto)
-        engine.sync(SyncChannel.Discover, SyncMode.Auto)
+        _syncing.value = true
+        try {
+            refreshInternal()
+        } finally {
+            _syncing.value = false
+        }
         reloadFromCache()
+    }
+
+    private suspend fun refreshInternal() {
+        val r1 = engine.sync(SyncChannel.AppIndex, SyncMode.Auto)
+        val r2 = engine.sync(SyncChannel.Discover, SyncMode.Auto)
+        _lastError.value =
+            listOfNotNull(r1.error, r2.error)
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString("；") { it.describe() }
     }
 
     /** 首次使用/损坏兜底：前台全量 */
     suspend fun forceFull() {
-        engine.sync(SyncChannel.AppIndex, SyncMode.Full)
-        engine.sync(SyncChannel.Discover, SyncMode.Full)
+        _syncing.value = true
+        try {
+            forceFullInternal()
+        } finally {
+            _syncing.value = false
+        }
         reloadFromCache()
+    }
+
+    private suspend fun forceFullInternal() {
+        val r1 = engine.sync(SyncChannel.AppIndex, SyncMode.Full)
+        val r2 = engine.sync(SyncChannel.Discover, SyncMode.Full)
+        _lastError.value =
+            listOfNotNull(r1.error, r2.error)
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString("；") { it.describe() }
     }
 
     /** 客户端自身更新检查（独立于双通道） */

@@ -107,10 +107,12 @@ class SearchScene : StackScene() {
                 }
             }
 
+        // 全面屏适配：全屏搜索页避开状态栏与系统导航条；实色背景避免转场露出黑边
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background)
                     .statusBarsPadding()
                     .imePadding()
                     .navigationBarsPadding(),

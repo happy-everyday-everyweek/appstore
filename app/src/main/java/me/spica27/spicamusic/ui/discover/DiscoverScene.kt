@@ -61,12 +61,20 @@ fun DiscoverScene(onOpenSearch: () -> Unit) {
         }
         if (cards.isEmpty()) {
             item {
+                val syncing = viewModel.syncing.collectAsStateWithLifecycle().value
+                val error = viewModel.lastSyncError.collectAsStateWithLifecycle().value
+                val hint =
+                    when {
+                        syncing -> "推荐内容同步中…"
+                        error != null -> "推荐内容同步失败：$error"
+                        else -> "暂无推荐内容"
+                    }
                 Box(
                     modifier = Modifier.fillMaxWidth().height(280.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        text = "推荐内容同步中…",
+                        text = hint,
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

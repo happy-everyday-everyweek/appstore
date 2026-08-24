@@ -82,8 +82,15 @@ fun DetailScreen(app: AppMeta) {
     // 上游应用（upstream 指向的系统 ID 解析）
     val upstreamApp = app.upstreamId?.let { viewModel.appById(it) }
 
-    // 全面屏适配：全屏详情页避开状态栏与系统导航条
-    Box(modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+    // 全面屏适配：全屏详情页避开状态栏与系统导航条；实色背景避免转场露出黑边
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+    ) {
         // 背景：图标模糊铺底
         if (app.icon.isNotBlank()) {
             me.spica27.spicamusic.ui.components

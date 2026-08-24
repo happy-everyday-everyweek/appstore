@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,6 +47,8 @@ fun SettingsPage() {
     val viewModel: StoreViewModel = koinActivityViewModel()
     val syncState by viewModel.syncState.collectAsStateWithLifecycle()
     val updateAvailable by viewModel.updateAvailable.collectAsStateWithLifecycle()
+    val syncing by viewModel.syncing.collectAsStateWithLifecycle()
+    val lastError by viewModel.lastSyncError.collectAsStateWithLifecycle()
 
     LaunchedEffect(updateAvailable) {
         updateAvailable?.let {
@@ -73,6 +76,32 @@ fun SettingsPage() {
         )
 
         SettingsCard(title = "数据与同步") {
+            // 同步状态指示：进行中 / 上次失败原因
+            if (syncing) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Text(
+                        text = "正在同步…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+            if (lastError != null) {
+                Text(
+                    text = "上次同步失败：$lastError",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
             SettingRow(
                 icon = Icons.Default.Storage,
                 title = "应用列表数据",

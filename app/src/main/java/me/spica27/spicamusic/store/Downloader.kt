@@ -34,8 +34,9 @@ class OkHttpDownloader(
             attempts++
             try {
                 val file = downloadOnce(url, dest, onProgress)
-                // <10KB 空文件/短读防护
-                if (file.length() < 10 * 1024) {
+                // 空响应/短读防护：索引类资产（full.zip 仅含 index.json 等文本，数 KB 属正常）
+                // 阈值取 1KB，仅拦截真正的空/错误响应
+                if (file.length() < 1024) {
                     throw IllegalStateException("下载文件过小（${file.length()}B），疑似空响应")
                 }
                 if (expectedSha256 != null) {

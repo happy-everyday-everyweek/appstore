@@ -31,6 +31,8 @@ class StoreViewModel(
     val cards: StateFlow<DiscoverIndex> = repository.cards
     val updateAvailable: StateFlow<UpdateInfo?> = repository.updateAvailable
     val syncState: StateFlow<StoreRepository.SyncVersions> = repository.syncVersions
+    val syncing: StateFlow<Boolean> = repository.syncing
+    val lastSyncError: StateFlow<String?> = repository.lastError
 
     private val _downloading = MutableStateFlow(false)
     val downloading: StateFlow<Boolean> = _downloading.asStateFlow()
@@ -83,14 +85,18 @@ class StoreViewModel(
         }
     }
 
-    /** 手动触发后台静默同步（设置页"立即同步"） */
+    /** 手动触发后台静默同步（设置页"立即同步"），按结果提示 */
     fun refreshSilently(context: Context) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.refresh() }
             // Toast 必须在主线程
+            val error = repository.lastError.value
             android.widget.Toast
-                .makeText(context, "同步完成", android.widget.Toast.LENGTH_SHORT)
-                .show()
+                .makeText(
+                    context,
+                    if (error != null) "同步失败：$error" else "同步完成",
+                    android.widget.Toast.LENGTH_SHORT,
+                ).show()
         }
     }
 

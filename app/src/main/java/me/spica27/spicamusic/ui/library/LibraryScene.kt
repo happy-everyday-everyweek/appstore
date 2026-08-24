@@ -69,8 +69,17 @@ fun LibraryScene(onOpenSearch: () -> Unit) {
             }
             if (orderedApps.isEmpty()) {
                 item {
+                    // 首次/手动同步中或失败时，空态给出明确状态而非笼统的"暂无应用"
+                    val syncing = viewModel.syncing.collectAsStateWithLifecycle().value
+                    val error = viewModel.lastSyncError.collectAsStateWithLifecycle().value
+                    val hint =
+                        when {
+                            syncing -> "正在同步应用列表…"
+                            error != null -> "同步失败：$error\n下拉设置页可手动重试"
+                            else -> stringResource(R.string.empty_library)
+                        }
                     EmptyPlaceholder(
-                        text = stringResource(R.string.empty_library),
+                        text = hint,
                         modifier = Modifier.padding(vertical = 64.dp),
                     )
                 }

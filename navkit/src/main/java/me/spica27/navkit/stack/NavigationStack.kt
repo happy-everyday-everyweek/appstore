@@ -97,7 +97,7 @@ fun NavigationStack(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             // 渲染所有未 Disappeared 的场景（包括正在退场的，以保证退场动画可见）
             val visibleScenes = path.scenes.filter { scene ->
@@ -191,7 +191,9 @@ private fun SceneContainer(
                         ENTER_RADIUS.dp - (enter.toDouble().pow(2.0 * 4.0) * ENTER_RADIUS).dp
                     )
                     clip = true
-                    shadowElevation = 20f * (1f - enter)
+                    // 黑边修复：入场阶段不再叠加黑色投影（阴影会在圆角四周形成黑框）；
+                    // 保留圆角卡片与模糊/压缩动效（与根背景同色的边缘视觉统一）
+                    shadowElevation = 0f
                 }
 
                 // ── DialogScene 入场：背景变暗 + 去饱和度 ──────────────────
