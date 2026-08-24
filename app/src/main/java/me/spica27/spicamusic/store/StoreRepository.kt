@@ -43,6 +43,10 @@ class StoreRepository(
     private val _downloadProgress = MutableStateFlow<Float?>(null)
     val downloadProgress: StateFlow<Float?> = _downloadProgress.asStateFlow()
 
+    /** 同步流程阶段文案（测速/清单/下载…），首启引导与设置页展示 */
+    private val _syncStage = MutableStateFlow<String?>(null)
+    val syncStage: StateFlow<String?> = _syncStage.asStateFlow()
+
     /** 启动时：先读本地缓存（离线可用）；缓存为空（首启）走前台全量，否则后台静默增量 */
     suspend fun bootstrap() {
         reloadFromCache()
@@ -75,10 +79,12 @@ class StoreRepository(
 
     private suspend fun refreshInternal() {
         engine.onProgress = { _downloadProgress.value = it }
+        engine.onStage = { _syncStage.value = it }
         DebugLog.i("Sync", "开始静默增量同步（${SyncChannel.AppIndex.repo} / ${SyncChannel.Discover.repo}）")
         val r1 = engine.sync(SyncChannel.AppIndex, SyncMode.Auto)
         val r2 = engine.sync(SyncChannel.Discover, SyncMode.Auto)
         _lastError.value = syncErrorOf(r1) ?: syncErrorOf(r2)
+        _syncStage.value = null
         if (_lastError.value == null) DebugLog.i("Sync", "双通道同步完成")
     }
 
@@ -96,9 +102,11 @@ class StoreRepository(
 
     private suspend fun forceFullInternal() {
         engine.onProgress = { _downloadProgress.value = it }
+        engine.onStage = { _syncStage.value = it }
         val r1 = engine.sync(SyncChannel.AppIndex, SyncMode.Full)
         val r2 = engine.sync(SyncChannel.Discover, SyncMode.Full)
         _lastError.value = syncErrorOf(r1) ?: syncErrorOf(r2)
+        _syncStage.value = null
     }
 
     /** 关闭当前同步失败横幅（仅本次会话展示） */

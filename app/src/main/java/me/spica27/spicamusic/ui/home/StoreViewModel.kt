@@ -34,6 +34,7 @@ class StoreViewModel(
     val syncing: StateFlow<Boolean> = repository.syncing
     val lastSyncError: StateFlow<String?> = repository.lastError
     val downloadProgress: StateFlow<Float?> = repository.downloadProgress
+    val syncStage: StateFlow<String?> = repository.syncStage
 
     private val _downloading = MutableStateFlow(false)
     val downloading: StateFlow<Boolean> = _downloading.asStateFlow()

@@ -59,6 +59,7 @@ class HomeScene : StackScene() {
         val apps by storeViewModel.apps.collectAsStateWithLifecycle()
         val cards by storeViewModel.cards.collectAsStateWithLifecycle()
         val downloadProgress by storeViewModel.downloadProgress.collectAsStateWithLifecycle()
+        val syncStage by storeViewModel.syncStage.collectAsStateWithLifecycle()
 
         LaunchedEffect(updateAvailable) {
             updateAvailable?.let {
@@ -88,6 +89,7 @@ class HomeScene : StackScene() {
                     InitSyncLayer(
                         syncing = syncing,
                         progress = downloadProgress,
+                        stage = syncStage,
                         error = lastSyncError,
                         onRetry = { storeViewModel.retryBootstrap() },
                     )
@@ -183,6 +185,7 @@ private fun SyncErrorBanner(
 private fun InitSyncLayer(
     syncing: Boolean,
     progress: Float?,
+    stage: String?,
     error: String?,
     onRetry: () -> Unit,
 ) {
@@ -204,7 +207,7 @@ private fun InitSyncLayer(
                 .Spacer(modifier = Modifier.height(24.dp))
             if (syncing) {
                 Text(
-                    text = "首次使用：正在下载应用数据",
+                    text = stage ?: "首次使用：正在下载应用数据",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )

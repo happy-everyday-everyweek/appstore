@@ -27,12 +27,18 @@ class GitLinkDownloader(
     private val client: OkHttpClient =
         OkHttpClient
             .Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(90, TimeUnit.SECONDS)
-            .writeTimeout(90, TimeUnit.SECONDS)
+            .connectTimeout(6, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build(),
 ) : Downloader {
     private val tester = SpeedTester(client)
+
+    /** 阶段回调用（测速/尝试镜像等），供 UI 展示具体流程 */
+    var onStage: ((String) -> Unit)? = null
+
+    /** 下载失败时最多连续尝试的镜像数（测速排序后前几名足够；避免逐个 6s 超时拖死首启） */
+    private val maxMirrorAttempts = 8
 
     override suspend fun download(
         url: String,
@@ -40,10 +46,14 @@ class GitLinkDownloader(
         expectedSha256: String?,
         onProgress: (Float) -> Unit,
     ): File {
+        onStage?.invoke("正在对 33 个镜像测速挑选最快源…")
         val ranked = rankMirrors(url)
         val attempts = mutableListOf<String>()
         var lastErr: Throwable = IOException("无可用镜像")
-        for (mirror in ranked) {
+        val total = minOf(ranked.size, maxMirrorAttempts)
+        for (index in 0 until total) {
+            val mirror = ranked[index]
+            onStage?.invoke("正在尝试镜像「${mirror.name}」（${index + 1}/$total）…")
             try {
                 val file = downloadVia(mirror.prefix + url, dest, onProgress)
                 // 空响应防护：仅拒绝 0 字节（增量包可能只含 1~2 个应用的差异，体积可能不足 1KB）
@@ -65,7 +75,7 @@ class GitLinkDownloader(
         }
         // 聚合所有镜像失败原因，方便用户/诊断定位
         val detail = attempts.joinToString("；")
-        throw IOException("镜像全部失败（${ranked.size} 个镜像）：$detail", lastErr)
+        throw IOException("镜像全部失败（尝试 $total 个）：$detail", lastErr)
     }
 
     /**

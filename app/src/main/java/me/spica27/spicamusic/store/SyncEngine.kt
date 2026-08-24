@@ -30,6 +30,15 @@ class SyncEngine(
     /** 下载进度回调（0f~1f；一次同步内多次资产下载会刷新） */
     var onProgress: ((Float) -> Unit)? = null
 
+    /** 流程阶段回调（供首启引导/设置页展示具体步骤文案） */
+    var onStage: ((String) -> Unit)? = null
+
+    /** 桥接 GitLink 下载器的内部阶段（测速/逐镜像尝试） */
+    init {
+        (downloader as? me.spica27.spicamusic.store.gitlink.GitLinkDownloader)
+            ?.onStage = { s -> onStage?.invoke(s) }
+    }
+
     suspend fun sync(
         channel: SyncChannel,
         mode: SyncMode = SyncMode.Auto,
@@ -37,6 +46,7 @@ class SyncEngine(
         val baseUrl = "https://github.com/${channel.repo}/releases/latest/download"
         val last = store.readVersion(channel)
         DebugLog.i("Sync", "[${channel.name}] 直链源=$baseUrl 本地版本=$last 模式=$mode")
+        onStage?.invoke("正在获取更新清单 patch.json（${channel.name}）…")
         val patchText =
             try {
                 downloadAsset(channel, "$baseUrl/patch.json", "patch.json").also {
@@ -76,6 +86,9 @@ class SyncEngine(
         }
         val canIncremental = patch.base == last && patch.algorithm == ALGORITHM
         DebugLog.i("Sync", "[${channel.name}] 选择 ${if (canIncremental) "增量" else "全量"}包")
+        onStage?.invoke(
+            "正在下载${if (canIncremental) "增量" else "全量"}数据（${channel.name}）…",
+        )
         return if (canIncremental) {
             applyIncremental(channel, baseUrl, patch)
         } else {
