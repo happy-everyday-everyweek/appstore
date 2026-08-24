@@ -25,6 +25,7 @@ jobs:
       - name: 构建 Release APK
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
+          chmod +x gradlew
           ./gradlew :app:assembleRelease --no-daemon
 
       - name: 读取版本号
