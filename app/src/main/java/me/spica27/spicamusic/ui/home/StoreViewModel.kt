@@ -54,7 +54,7 @@ class StoreViewModel(
     /** 应用详情页依赖：按 id 查应用；upstream 跳转用 */
     fun appById(id: String?): AppMeta? = repository.apps.value[id]
 
-    /** APK 下载：GitLink 下载底座直连开发者 Release，校验后提示 */
+    /** APK 下载：GitLink 下载底座直连开发者 Release，校验 SHA-256 后进入系统安装界面 */
     fun downloadApk(
         context: Context,
         app: AppMeta,
@@ -69,19 +69,45 @@ class StoreViewModel(
             try {
                 val dir = File(context.getExternalFilesDir(null), "downloads")
                 val fileName = "${app.name.ifBlank { app.packageName }}_${app.version.releaseTag}.apk"
-                withContext(Dispatchers.IO) {
-                    downloader.download(
-                        url = app.apkUrl,
-                        dest = File(dir, fileName),
-                        expectedSha256 = app.apkSha256.ifBlank { null },
-                    )
-                }
-                _lastDownload.value = "已保存：${File(dir, fileName).absolutePath}"
+                val file =
+                    withContext(Dispatchers.IO) {
+                        downloader.download(
+                            url = app.apkUrl,
+                            dest = File(dir, fileName),
+                            expectedSha256 = app.apkSha256.ifBlank { null },
+                        )
+                    }
+                _lastDownload.value = "已保存：${file.absolutePath}"
+                promptInstall(context, file)
             } catch (e: Exception) {
                 _lastDownload.value = "下载失败：${e.message}"
             } finally {
                 _downloading.value = false
             }
+        }
+    }
+
+    /** 经 FileProvider 拉起系统安装界面（下载完成、校验通过后） */
+    private fun promptInstall(
+        context: Context,
+        apk: File,
+    ) {
+        try {
+            val uri =
+                androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    apk,
+                )
+            val intent =
+                android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, "application/vnd.android.package-archive")
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            _lastDownload.value = "安装引导失败：${e.message}"
         }
     }
 
@@ -100,7 +126,7 @@ class StoreViewModel(
         }
     }
 
-    /** 手动检查客户端自身更新（设置页"检查更新"） */
+    /** 手动检查客户端自身更新（保留方法供调试；规格为开屏静默，无 UI 入口） */
     fun checkSelfUpdate(context: Context) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.checkSelfUpdate(updater) }
@@ -118,5 +144,31 @@ class StoreViewModel(
     fun consumeDownloadMessage(onConsumed: () -> Unit) {
         _lastDownload.value = null
         onConsumed()
+    }
+
+    /** 客户端自身更新下载（GitLink 镜像加速）→ 校验后拉起安装 */
+    fun downloadUpdate(context: Context) {
+        val info = updateAvailable.value ?: return
+        if (_downloading.value) return
+        viewModelScope.launch {
+            _downloading.value = true
+            try {
+                val dir = File(context.getExternalFilesDir(null), "downloads")
+                val file =
+                    withContext(Dispatchers.IO) {
+                        downloader.download(
+                            url = info.downloadUrl,
+                            dest = File(dir, "appstore-update.apk"),
+                            expectedSha256 = null,
+                        )
+                    }
+                _lastDownload.value = "更新包已下载：${file.absolutePath}"
+                promptInstall(context, file)
+            } catch (e: Exception) {
+                _lastDownload.value = "更新下载失败：${e.message}"
+            } finally {
+                _downloading.value = false
+            }
+        }
     }
 }

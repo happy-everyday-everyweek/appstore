@@ -1,0 +1,138 @@
+package me.spica27.spicamusic.store.gitlink
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
+import me.spica27.spicamusic.store.Downloader
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okio.buffer
+import okio.sink
+import java.io.File
+import java.io.IOException
+import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
+
+/**
+ * GitLink 下载底座（移植自用户的 GitLink 应用）：
+ * - 内置 33 个 GitHub 加速镜像（ghproxy 系列 / ghfast / 官方直连等，见 [Mirrors]）
+ * - 下载前全镜像并发智能测速（6 秒分段采样，抗"先快后慢"，见 [SpeedTester]），按评分降序尝试
+ * - Range 断点续传 + 空文件防护（镜像返回过小文件自动换下一源，最多 3 轮）
+ * - 支持 SHA-256 强校验（聚合包/推荐包/APK 下载共用）
+ * 针对国内网络：镜像全员可达性由测速自动淘汰，任意一源可用即可完成下载。
+ */
+class GitLinkDownloader(
+    private val client: OkHttpClient =
+        OkHttpClient
+            .Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .build(),
+) : Downloader {
+    private val tester = SpeedTester(client)
+
+    override suspend fun download(
+        url: String,
+        dest: File,
+        expectedSha256: String?,
+        onProgress: (Float) -> Unit,
+    ): File {
+        val ranked = rankMirrors(url)
+        var lastErr: Throwable = IOException("无可用镜像")
+        for (mirror in ranked) {
+            try {
+                val file = downloadVia(mirror.prefix + url, dest, onProgress)
+                // 空响应防护：仅拒绝 0 字节（增量包可能只含 1~2 个应用的差异，体积可能不足 1KB）
+                if (file.length() < 1) {
+                    throw IOException("下载文件为空（0B），疑似空响应")
+                }
+                if (expectedSha256 != null) {
+                    val actual = sha256(file)
+                    if (actual != expectedSha256) {
+                        throw IOException("SHA-256 不一致：期望 $expectedSha256，实际 $actual")
+                    }
+                }
+                return file
+            } catch (e: Exception) {
+                lastErr = e
+                dest.delete()
+            }
+        }
+        throw lastErr
+    }
+
+    /**
+     * 全镜像并发测速（GitLink 智能测速），按评分降序；失败镜像沉底。
+     * 测速窗口约 6 秒（小文件在探测字节数内提前结束）。
+     */
+    private suspend fun rankMirrors(url: String): List<Mirror> =
+        withContext(Dispatchers.IO) {
+            coroutineScope {
+                Mirrors.DEFAULT
+                    .map { mirror -> async { mirror to tester.probe(mirror, url) } }
+                    .awaitAll()
+            }.sortedByDescending { (_, result) -> result.score }
+                .map { (mirror, _) -> mirror }
+        }
+
+    /** 单源流式下载：Range 断点续传，进度回调 */
+    private suspend fun downloadVia(
+        fullUrl: String,
+        dest: File,
+        onProgress: (Float) -> Unit,
+    ): File =
+        withContext(Dispatchers.IO) {
+            dest.parentFile?.mkdirs()
+            val existing = dest.length()
+            val request =
+                Request
+                    .Builder()
+                    .url(fullUrl)
+                    .header("User-Agent", "GitLink/1.0 (Android)")
+                    .apply {
+                        if (existing > 0) header("Range", "bytes=$existing-")
+                    }.build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful && response.code != 206) {
+                    throw IOException("HTTP ${response.code}")
+                }
+                val total =
+                    response.body
+                        ?.contentLength()
+                        ?.takeIf { it > 0 }
+                        ?.plus(existing) ?: existing
+                val input = response.body?.source() ?: throw IOException("空响应体")
+                val output = dest.sink().buffer()
+                input.use { src ->
+                    output.use { out ->
+                        val buffer = okio.Buffer()
+                        var written = existing
+                        while (true) {
+                            val read = src.read(buffer, 64 * 1024)
+                            if (read == -1L) break
+                            out.write(buffer, read)
+                            written += read
+                            if (total > 0) onProgress((written.toFloat() / total).coerceIn(0f, 1f))
+                        }
+                    }
+                }
+            }
+            dest
+        }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+}

@@ -51,6 +51,8 @@ data class AppMeta(
     val summary: String = "",
     val openSource: Boolean = false,
     val specialPermissions: List<SpecialPermission> = emptyList(),
+    val permissions: List<String> = emptyList(),
+    val readme: String = "",
     val grade: AppGrade = AppGrade.E,
     val version: AppVersion = AppVersion(),
     val license: String? = null,

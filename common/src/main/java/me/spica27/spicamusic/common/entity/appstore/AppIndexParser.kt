@@ -39,6 +39,9 @@ object AppIndexParser {
                 .mapNotNull { it.jsonPrimitive.contentOrNull }
                 .map { SpecialPermission.fromRaw(it) }
                 .filter { it != SpecialPermission.NONE },
+            permissions = (obj["permissions"]?.jsonArray ?: emptyList())
+                .mapNotNull { it.jsonPrimitive.contentOrNull },
+            readme = obj["readme"]?.jsonPrimitive?.contentOrNull ?: "",
             grade = AppGrade.fromRaw(obj["grade"]?.jsonPrimitive?.contentOrNull),
             version = AppVersion(
                 versionName = version?.get("versionName")?.jsonPrimitive?.contentOrNull ?: "",

@@ -5,12 +5,12 @@ import me.spica27.spicamusic.core.preferences.PreferencesManager
 import me.spica27.spicamusic.store.Downloader
 import me.spica27.spicamusic.store.GitHubReleaseClient
 import me.spica27.spicamusic.store.GitHubReleaseClientImpl
-import me.spica27.spicamusic.store.OkHttpDownloader
 import me.spica27.spicamusic.store.SelfUpdater
 import me.spica27.spicamusic.store.SelfUpdaterImpl
 import me.spica27.spicamusic.store.StoreRepository
 import me.spica27.spicamusic.store.SyncEngine
 import me.spica27.spicamusic.store.SyncStore
+import me.spica27.spicamusic.store.gitlink.GitLinkDownloader
 import me.spica27.spicamusic.ui.home.StoreViewModel
 import okhttp3.OkHttpClient
 import org.koin.android.ext.koin.androidContext
@@ -40,8 +40,8 @@ object AppModule {
             // GitHub Release 查询（唯一对外 API 面）
             single<GitHubReleaseClient> { GitHubReleaseClientImpl(get()) }
 
-            // 下载底座（GitLink 移植：分块 / 断点续传 / SHA-256 / 空文件重试）
-            single<Downloader> { OkHttpDownloader(get()) }
+            // 下载底座（GitLink 移植：33 镜像智能测速 / 断点续传 / 空文件换源 / SHA-256）
+            single<Downloader> { GitLinkDownloader() }
 
             // 本地同步状态（filesDir/store/）；同时把资产根暴露给 StoreAssets（推荐页封面/正文）
             single<SyncStore> {

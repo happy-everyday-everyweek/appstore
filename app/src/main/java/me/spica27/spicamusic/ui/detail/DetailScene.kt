@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +49,7 @@ import me.spica27.spicamusic.ui.components.AppIcon
 import me.spica27.spicamusic.ui.components.OpenSourceTag
 import me.spica27.spicamusic.ui.components.TagChip
 import me.spica27.spicamusic.ui.components.gradeColors
+import me.spica27.spicamusic.ui.discover.MarkdownPlain
 import me.spica27.spicamusic.ui.home.StoreViewModel
 import org.koin.compose.viewmodel.koinActivityViewModel
 
@@ -182,7 +184,7 @@ fun DetailScreen(app: AppMeta) {
                 }
             }
 
-            // 来源仓库
+            // 来源仓库 + 完整校验信息（用户故事 17：校验和与来源 Release 可见）
             if (app.repo.isNotBlank()) {
                 Text(
                     text =
@@ -193,6 +195,33 @@ fun DetailScreen(app: AppMeta) {
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
                 )
+            }
+            if (app.packageName.isNotBlank() || app.apkSha256.isNotBlank()) {
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 32.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    if (app.packageName.isNotBlank()) {
+                        Text(
+                            text = "包名：${app.packageName}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.7f),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    if (app.apkSha256.isNotBlank()) {
+                        Text(
+                            text = "APK SHA-256：${app.apkSha256.take(16)}…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.6f),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
             }
 
             // 上游应用入口（upstream）
@@ -233,34 +262,67 @@ fun DetailScreen(app: AppMeta) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 介绍（README）
+            // 介绍（README）：优先读随包资产 assets/readmes/<id>.md（Markdown 轻渲染）
             SectionCard(title = stringResource(R.string.detail_readme)) {
-                Text(
-                    text =
-                        buildString {
-                            append("README 已随应用收录并存档于承载仓库；全文可前往开发者仓库查看：\n")
-                            append("github.com/").append(app.repo.ifBlank { "（仓库信息同步中）" })
-                        },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-
-            // 权限区：最低特殊权限标签 + 说明（完整权限清单随 APK 核验，见聚合包核验记录）
-            SectionCard(title = stringResource(R.string.detail_permissions)) {
-                if (app.specialPermissions.isEmpty()) {
+                val readmeText =
+                    remember(app.readme) {
+                        if (app.readme.isBlank()) {
+                            null
+                        } else {
+                            me.spica27.spicamusic.store.StoreAssets
+                                .file(app.readme.removePrefix("assets/"))
+                                ?.readText()
+                        }
+                    }
+                if (readmeText != null) {
                     Text(
-                        text = "无特殊权限（none）",
+                        text = MarkdownPlain.render(readmeText),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text =
+                            buildString {
+                                append("README 已随应用收录并存档于承载仓库（随包同步中）；全文可前往开发者仓库查看：\n")
+                                append("github.com/").append(app.repo.ifBlank { "（仓库信息同步中）" })
+                            },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+
+            // 权限区：最低特殊权限标签 + APK 解包提取的完整权限清单
+            SectionCard(title = stringResource(R.string.detail_permissions)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (app.specialPermissions.isEmpty()) {
+                        Text(
+                            text = "无特殊权限（none）",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
                         app.specialPermissions.forEach { perm ->
                             Text(
                                 text = "• ${perm.label}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                    if (app.permissions.isNotEmpty()) {
+                        Text(
+                            text = "完整权限清单（取自 APK 解包）：",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                        app.permissions.forEach { permission ->
+                            Text(
+                                text = "• $permission",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }

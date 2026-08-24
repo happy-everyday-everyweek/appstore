@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -21,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -100,6 +103,33 @@ fun AppIcon(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(size * 0.6f),
             )
+        } else if (app.icon.startsWith("assets/")) {
+            // 随包图标资产（聚合包 assets/icons/<id>.<ext>）
+            val rel = app.icon.removePrefix("assets/")
+            val file =
+                me.spica27.spicamusic.store.StoreAssets
+                    .file(rel)
+            val bitmap =
+                file?.let {
+                    runCatching { android.graphics.BitmapFactory.decodeFile(it.absolutePath) }.getOrNull()
+                }
+            if (bitmap != null) {
+                androidx.compose.foundation.Image(
+                    painter =
+                        androidx.compose.ui.graphics.painter
+                            .BitmapPainter(bitmap.asImageBitmap()),
+                    contentDescription = app.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Android,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(size * 0.6f),
+                )
+            }
         } else {
             androidx.compose.runtime.key(app.icon) {
                 me.spica27.spicamusic.ui.components.StoreAsyncIcon(

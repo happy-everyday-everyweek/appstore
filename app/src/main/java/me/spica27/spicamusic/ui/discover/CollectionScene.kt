@@ -67,7 +67,7 @@ class CollectionScene(
             Box(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(120.dp),
             ) {
-                TodayCard(card = card, onClick = {}) // 缩略卡自身不可再深入
+                ArticleTodayCard(card = card, onOpenCard = {}, height = 120.dp) // 缩略卡自身不可再深入
             }
 
             Spacer(modifier = Modifier.height(8.dp))

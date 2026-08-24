@@ -19,7 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Icon
@@ -76,7 +75,7 @@ fun SettingsPage() {
         )
 
         SettingsCard(title = "数据与同步") {
-            // 同步状态指示：进行中 / 上次失败原因
+            // 同步状态指示：进行中 / 上次失败原因（规格：无手动刷新按钮，同步静默自动）
             if (syncing) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
@@ -106,33 +105,32 @@ fun SettingsPage() {
                 icon = Icons.Default.Storage,
                 title = "应用列表数据",
                 subtitle = syncState.appIndexVersion ?: "尚未同步",
-                action = { viewModel.refreshSilently(context) },
-                actionLabel = "重新同步",
             )
             SettingRow(
                 icon = Icons.Default.Storage,
                 title = "推荐内容数据",
                 subtitle = syncState.discoverVersion ?: "尚未同步",
-                action = { viewModel.refreshSilently(context) },
-                actionLabel = "重新同步",
-            )
-            SettingRow(
-                icon = Icons.Default.Refresh,
-                title = "立即后台静默同步",
-                subtitle = "与开屏等待相同的增量同步",
-                action = { viewModel.refreshSilently(context) },
-                actionLabel = "同步",
             )
         }
 
         SettingsCard(title = "客户端自身更新") {
-            SettingRow(
-                icon = Icons.Default.SystemUpdate,
-                title = "检查更新",
-                subtitle = "内置自身 GitHub 仓库，独立于商店收录",
-                action = { viewModel.checkSelfUpdate(context) },
-                actionLabel = "检查",
-            )
+            // 规格：打开应用时静默查询新版本并提示，无手动检查入口
+            val update = updateAvailable
+            if (update != null) {
+                SettingRow(
+                    icon = Icons.Default.SystemUpdate,
+                    title = "发现新版本 ${update.versionName}",
+                    subtitle = "下载走 GitLink 镜像加速",
+                    action = { viewModel.downloadUpdate(context) },
+                    actionLabel = "下载更新",
+                )
+            } else {
+                SettingRow(
+                    icon = Icons.Default.SystemUpdate,
+                    title = "已是最新版本",
+                    subtitle = "内置自身 GitHub 仓库，独立于商店收录",
+                )
+            }
         }
 
         SettingsCard(title = "关于") {
