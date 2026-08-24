@@ -28,6 +28,12 @@ object DebugLog {
     ) = push("I", tag, message)
 
     @Synchronized
+    fun w(
+        tag: String,
+        message: String,
+    ) = push("W", tag, message)
+
+    @Synchronized
     fun e(
         tag: String,
         message: String,
