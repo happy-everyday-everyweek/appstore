@@ -338,16 +338,12 @@ fun DetailScreen(app: AppMeta) {
                         }
                     }
                 if (readmeText != null) {
-                    Text(
-                        text = MarkdownPlain.render(readmeText),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    me.spica27.spicamusic.ui.components.MarkdownContent(text = readmeText)
                 } else {
                     Text(
                         text =
                             buildString {
-                                append("README 已随应用收录并存档于承载仓库，同步完成后即可阅读全文；也可前往开发者仓库查看：\n")
+                                append("README 已随应用同步，正在补齐内容；也可前往开发者仓库查看：\n")
                                 append("github.com/").append(app.repo.ifBlank { "仓库信息同步中" })
                             },
                         style = MaterialTheme.typography.bodyMedium,
