@@ -163,6 +163,9 @@ dependencies {
 
   implementation(libs.landscapist.core)
   implementation(libs.landscapist.image)
+  // README/文章 Markdown 渲染（mikepenz 多平台渲染器 + coil3 图片加载）
+  implementation(libs.markdown.renderer.m3)
+  implementation(libs.markdown.renderer.coil3)
 
   // 播放器相关依赖 (实现层需要)
   implementation libs.androidx.media3.exoplayer
