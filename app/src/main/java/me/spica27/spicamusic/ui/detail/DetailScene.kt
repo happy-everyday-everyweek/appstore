@@ -1,12 +1,6 @@
 package me.spica27.spicamusic.ui.detail
 
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,9 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -392,63 +384,92 @@ fun DetailScreen(app: AppMeta) {
             Spacer(modifier = Modifier.height(96.dp))
         }
 
-        // 悬浮下载按钮（经 GitLink 下载底座直连开发者 Release）
-        ExtendedFloatingActionButton(
-            onClick = { viewModel.downloadApk(context, app) },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).navigationBarsPadding(),
-            containerColor = MaterialTheme.colorScheme.tertiary,
-            contentColor = MaterialTheme.colorScheme.onTertiary,
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Download,
-                    contentDescription = null,
-                )
-            },
-            text = {
-                Text(text = stringResource(R.string.detail_download))
-            },
-        )
-
-        // 下载状态横条弹窗（参考工程「下载下弹窗」：进度/速度/高采样折线图）
+        // 底部下载栏（参考工程下载交互：状态式按钮 + 下载中实时进度/速度折线图）
         val task by viewModel.downloadTask.collectAsStateWithLifecycle()
-        AnimatedVisibility(
-            visible = task != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(tween(240)),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(tween(200)),
-            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
-        ) {
-            task?.let { DownloadMiniSheet(task = it, onClose = { viewModel.dismissDownloadTask() }) }
-        }
+        val downloading by viewModel.downloading.collectAsStateWithLifecycle()
+        val lastDownloadedApk by viewModel.lastDownloadedApk.collectAsStateWithLifecycle()
+        DownloadBar(
+            app = app,
+            task = task,
+            downloading = downloading,
+            lastDownloadedApk = lastDownloadedApk,
+            onDownload = { viewModel.downloadApk(context, app) },
+            onReinstall = { viewModel.reinstallLastDownload(context) },
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+        )
     }
 }
 
-/** 下载横条弹窗：文件名 / 进度条 / 瞬时速度与百分比 / 高采样速度折线图 */
+/** 底部下载栏：应用名 + 状态按钮（下载/下载中进度/安装/重试）；下载中展开速度折线图 */
 @Composable
-private fun DownloadMiniSheet(
-    task: DownloadTaskUi,
-    onClose: () -> Unit,
+private fun DownloadBar(
+    app: AppMeta,
+    task: StoreViewModel.DownloadTaskUi?,
+    downloading: Boolean,
+    lastDownloadedApk: String?,
+    onDownload: () -> Unit,
+    onReinstall: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val completed = task?.done == true && !task.status.startsWith("下载失败") && task.lastFile != null
+    val failed = task?.done == true && task.status.startsWith("下载失败")
     Surface(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
-        shape = RoundedCornerShape(20.dp),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 10.dp,
+        shadowElevation = 12.dp,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = task.fileName,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                AppIcon(app = app, size = 44.dp)
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = app.name.ifBlank { app.packageName },
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text =
+                            when {
+                                downloading -> task?.status ?: "下载中…"
+                                completed -> "已下载 · 点击右侧按钮安装"
+                                failed -> task?.status ?: "下载失败，点击重试"
+                                else -> "开发者 Release 直连 · SHA-256 校验"
+                            },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Button(
+                    onClick = { if (completed) onReinstall() else onDownload() },
+                    enabled = !downloading,
+                    shape = RoundedCornerShape(14.dp),
+                ) {
+                    when {
+                        downloading -> Text("${(task?.progress?.times(100))?.toInt() ?: 0}%")
+                        completed -> Text("安装")
+                        failed -> Text("重试")
+                        else -> Text("下载")
+                    }
+                }
+            }
+            // 下载中：进度条 + 实时速度 + 高采样速度折线图（反映镜像质量与下载进行状态）
+            if (downloading) {
+                val history = task?.speedHistory.orEmpty()
+                Spacer(modifier = Modifier.height(10.dp))
                 LinearProgressIndicator(
-                    progress = { task.progress },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    progress = { task?.progress ?: 0f },
+                    modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.primary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
@@ -457,40 +478,30 @@ private fun DownloadMiniSheet(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "速度 ${formatSpeed(task.speedHistory.lastOrNull())}",
+                        text = "实时 ${formatSpeed(history.lastOrNull())}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "${(task.progress * 100).toInt()}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (history.size >= 2) {
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "平均 ${formatSpeed(history.average().toLong())}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = task.status,
+                        text = formatSpeed(history.maxOrNull()) + " 峰值",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.tertiary,
                     )
                 }
                 SpeedChart(
-                    history = task.speedHistory,
+                    history = history,
                     color = MaterialTheme.colorScheme.primary,
                     gridColor = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                )
-            }
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier.padding(start = 8.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
