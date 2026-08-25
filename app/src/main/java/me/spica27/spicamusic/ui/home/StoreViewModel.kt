@@ -41,6 +41,7 @@ class StoreViewModel(
 
     /** APK 下载任务实时状态（下载栏展示：进度/高采样速度折线图/状态） */
     data class DownloadTaskUi(
+        val appId: String? = null, // 归属应用（集合页多行各自展示状态用）
         val fileName: String = "",
         val progress: Float = 0f,
         val speedHistory: List<Long> = emptyList(), // 瞬时速度 B/s（高采样）
@@ -80,7 +81,7 @@ class StoreViewModel(
     ) {
         if (app.apkUrl.isBlank()) {
             _lastDownload.value = "该应用暂无可下载的 APK（待采集）"
-            _downloadTask.value = DownloadTaskUi(fileName = app.name, status = "暂无可下载的 APK", done = true)
+            _downloadTask.value = DownloadTaskUi(appId = app.id, fileName = app.name, status = "暂无可下载的 APK", done = true)
             return
         }
         if (_downloading.value) return
@@ -88,7 +89,7 @@ class StoreViewModel(
             _downloading.value = true
             val fileName = "${app.name.ifBlank { app.packageName }}_${app.version.releaseTag}.apk"
             _downloadTask.value =
-                DownloadTaskUi(fileName = fileName, status = "正在测速挑选最快镜像…")
+                DownloadTaskUi(appId = app.id, fileName = fileName, status = "正在测速挑选最快镜像…")
             var lastSampleMs = 0L
             var lastSampleBytes = 0L
             val history = mutableListOf<Long>()
