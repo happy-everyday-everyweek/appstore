@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<provider>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
     <cache-path
         name="cache"
         path="." />
-
-</provider>
+    <!-- 应用私有外部文件（下载的 APK 存放在 getExternalFilesDir()/downloads，安装引导必须可达） -->
+    <external-files-path
+        name="external_files"
+        path="." />
+    <files-path
+        name="files"
+        path="." />
+</paths>
