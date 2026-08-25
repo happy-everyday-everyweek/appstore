@@ -128,13 +128,13 @@ class SyncEngine(
                 return applyFull(channel, baseUrl, patch)
             }
             store.writeCachedText(channel, serializeIndex(merged))
-            // 兜底：增量包若不含资产（历史发布物），补齐资产必须走全量
-            if (entries.keys.none { it.startsWith(ASSETS_PREFIX) }) {
+            // 兜底：增量包若不含任何资产（历史发布物），补齐资产必须走全量
+            if (!hasAssetEntries(entries)) {
                 zip.delete()
-                DebugLog.i("Sync", "[${channel.name}] 增量包无资产，回退全量以补齐图标/README")
+                DebugLog.i("Sync", "[${channel.name}] 增量包无资产，回退全量以补齐图标/README/文章/封面")
                 return applyFull(channel, baseUrl, patch)
             }
-            store.writeAssets(entries.filterKeys { it.startsWith(ASSETS_PREFIX) })
+            store.writeAssets(entries.filterKeys { it != "incremental.json" })
             store.writeVersion(channel, patch.target ?: patch.base ?: "")
             zip.delete()
             SyncResult(changed = true, applied = PackageKind.Incremental)
@@ -172,7 +172,8 @@ class SyncEngine(
                 entries["index.json"]?.decodeToString()
                     ?: throw IllegalStateException("全量包缺 index.json")
             store.writeCachedText(channel, indexText)
-            store.writeAssets(entries.filterKeys { it.startsWith(ASSETS_PREFIX) })
+            // 资产键可能带 assets/ 前缀（聚合包）或不带（历史推荐包），统一落盘兼容
+            store.writeAssets(entries.filterKeys { it != "index.json" })
             store.writeVersion(channel, patch.target ?: patch.base ?: "")
             zip.delete()
             SyncResult(changed = true, applied = PackageKind.Full)
@@ -273,5 +274,9 @@ class SyncEngine(
         const val FULL_ZIP = "full.zip"
         const val INCREMENTAL_ZIP = "incremental.zip"
         const val ASSETS_PREFIX = "assets/"
+
+        /** 解压条目中是否存在资产（index/incremental 之外的键，兼容带/不带 assets/ 前缀） */
+        private fun hasAssetEntries(entries: Map<String, ByteArray>): Boolean =
+            entries.keys.any { it != "index.json" && it != "incremental.json" && it != "patch.json" }
     }
 }
