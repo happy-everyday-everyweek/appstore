@@ -35,8 +35,9 @@ object AppIndexParser {
             icon = obj["icon"]?.jsonPrimitive?.contentOrNull ?: "",
             summary = obj["summary"]?.jsonPrimitive?.contentOrNull ?: "",
             openSource =
-                obj["openSource"]?.jsonPrimitive?.booleanOrNull
-                    ?: obj["source"]?.jsonObject?.get("openSourceVerified")?.jsonPrimitive?.booleanOrNull
+                obj["openSource"]?.toBooleanCompat()
+                    ?: obj["source"]?.jsonObject?.get("openSource")?.toBooleanCompat()
+                    ?: obj["source"]?.jsonObject?.get("openSourceVerified")?.toBooleanCompat()
                     ?: false,
             specialPermissions = (obj["specialPermissions"]?.jsonArray ?: emptyList())
                 .mapNotNull { it.jsonPrimitive.contentOrNull }
@@ -67,4 +68,11 @@ object AppIndexParser {
 
     private fun JsonPrimitive.intOrNull(): Int? =
         doubleOrNull?.toInt() ?: contentOrNull?.takeIf { it.isNotEmpty() }?.toIntOrNull()
+
+    /** 布尔兼容解析：接受 JSON 布尔 true/false，也接受字符串 "true"/"false"（历史数据） */
+    private fun kotlinx.serialization.json.JsonElement.toBooleanCompat(): Boolean? {
+        val p = jsonPrimitive
+        p.booleanOrNull?.let { return it }
+        return p.contentOrNull?.toBooleanStrictOrNull()
+    }
 }
