@@ -26,7 +26,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -50,6 +49,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.spica27.navkit.path.LocalNavigationPath
 import me.spica27.navkit.scene.StackScene
@@ -126,12 +126,13 @@ fun DetailScreen(app: AppMeta) {
                     ),
         )
 
-        // 悬浮返回按钮（独立于滚动内容，避让状态栏）
+        // 悬浮返回按钮（zIndex 置顶：内容区为可滚动 Column，会吞掉下层点击，必须盖在最上层）
         androidx.compose.material3.IconButton(
             onClick = { path.popTop() },
             modifier =
                 Modifier
                     .align(Alignment.TopStart)
+                    .zIndex(10f)
                     .statusBarsPadding()
                     .padding(8.dp)
                     .size(40.dp)
@@ -404,7 +405,7 @@ fun DetailScreen(app: AppMeta) {
     }
 }
 
-/** 底部下载栏：应用名 + 状态按钮（下载/下载中进度/安装/重试）；下载中展开速度折线图 */
+/** 底部下载长条：黑色长条式下载按钮（替代卡片形态；卡片形态仅用于文章内关联应用） */
 @Composable
 private fun DownloadBar(
     app: AppMeta,
@@ -417,21 +418,22 @@ private fun DownloadBar(
 ) {
     val completed = task?.done == true && !task.status.startsWith("下载失败") && task.lastFile != null
     val failed = task?.done == true && task.status.startsWith("下载失败")
+    val barColor = Color(0xFF14181D)
     Surface(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 12.dp,
+        shape = RoundedCornerShape(18.dp),
+        color = barColor,
+        shadowElevation = 10.dp,
     ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(app = app, size = 44.dp)
+                AppIcon(app = app, size = 40.dp)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = app.name.ifBlank { app.packageName },
                         style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = Color.White,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -444,34 +446,45 @@ private fun DownloadBar(
                                 else -> "开发者 Release 直连 · SHA-256 校验"
                             },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Color.White.copy(alpha = 0.7f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                Button(
+                // 右侧主按钮：白底黑字（安装态绿色），黑色长条上的强对比
+                val btnColor = if (completed) Color(0xFF34C759) else Color.White
+                val btnTextColor = Color(0xFF101418)
+                Surface(
                     onClick = { if (completed) onReinstall() else onDownload() },
                     enabled = !downloading,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = btnColor,
                 ) {
-                    when {
-                        downloading -> Text("${(task?.progress?.times(100))?.toInt() ?: 0}%")
-                        completed -> Text("安装")
-                        failed -> Text("重试")
-                        else -> Text("下载")
-                    }
+                    Text(
+                        text =
+                            when {
+                                downloading -> "${(task?.progress?.times(100))?.toInt() ?: 0}%"
+                                completed -> "安装"
+                                failed -> "重试"
+                                else -> "下载"
+                            },
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        color = btnTextColor,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
+                    )
                 }
             }
-            // 下载中：进度条 + 实时速度 + 高采样速度折线图（反映镜像质量与下载进行状态）
+            // 下载中：白色进度条 + 实时/平均/峰值速度 + 折线图（黑色长条内白色绘制）
             if (downloading) {
                 val history = task?.speedHistory.orEmpty()
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
                     progress = { task?.progress ?: 0f },
                     modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    color = Color.White,
+                    trackColor = Color.White.copy(alpha = 0.2f),
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
@@ -480,28 +493,28 @@ private fun DownloadBar(
                     Text(
                         text = "实时 ${formatSpeed(history.lastOrNull())}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = Color.White.copy(alpha = 0.9f),
                     )
                     if (history.size >= 2) {
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "平均 ${formatSpeed(history.average().toLong())}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = Color.White.copy(alpha = 0.7f),
                         )
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = formatSpeed(history.maxOrNull()) + " 峰值",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = Color.White.copy(alpha = 0.7f),
                     )
                 }
                 SpeedChart(
                     history = history,
-                    color = MaterialTheme.colorScheme.primary,
-                    gridColor = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    color = Color.White,
+                    gridColor = Color.White.copy(alpha = 0.25f),
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
                 )
             }
         }
