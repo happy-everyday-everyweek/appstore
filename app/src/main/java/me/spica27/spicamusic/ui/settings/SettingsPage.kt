@@ -55,6 +55,15 @@ fun SettingsPage() {
     val syncing by viewModel.syncing.collectAsStateWithLifecycle()
     val lastError by viewModel.lastSyncError.collectAsStateWithLifecycle()
     val downloadProgress by viewModel.downloadProgress.collectAsStateWithLifecycle()
+    val lastDownload by viewModel.lastDownload.collectAsStateWithLifecycle()
+
+    // 下载/更新结果提示（一次性消费；详情页下载、设置页更新下载共用）
+    LaunchedEffect(lastDownload) {
+        lastDownload?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.consumeDownloadMessage { }
+        }
+    }
     // 调试模式（版本号连点 5 次开启）；日志页与调试实验室入口
     val path = me.spica27.navkit.path.LocalNavigationPath.current
     val homeViewModel: me.spica27.spicamusic.ui.home.HomeViewModel =
