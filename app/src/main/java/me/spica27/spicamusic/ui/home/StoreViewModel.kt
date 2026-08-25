@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import me.spica27.spicamusic.common.entity.appstore.AppIndex
 import me.spica27.spicamusic.common.entity.appstore.AppMeta
 import me.spica27.spicamusic.common.entity.appstore.DiscoverIndex
+import me.spica27.spicamusic.store.DebugLog
 import me.spica27.spicamusic.store.Downloader
 import me.spica27.spicamusic.store.SelfUpdater
 import me.spica27.spicamusic.store.StoreRepository
@@ -79,15 +80,21 @@ class StoreViewModel(
         context: Context,
         app: AppMeta,
     ) {
+        DebugLog.i("Download", "点击下载应用：${app.name}（id=${app.id}，版本=${app.version.releaseTag}）")
         if (app.apkUrl.isBlank()) {
+            DebugLog.w("Download", "应用 ${app.name} 无 apkUrl，暂不可下载")
             _lastDownload.value = "该应用暂无可下载的 APK（待采集）"
             _downloadTask.value = DownloadTaskUi(appId = app.id, fileName = app.name, status = "暂无可下载的 APK", done = true)
             return
         }
-        if (_downloading.value) return
+        if (_downloading.value) {
+            DebugLog.w("Download", "已有下载任务进行中，忽略重复点击（${app.name}）")
+            return
+        }
         viewModelScope.launch {
             _downloading.value = true
             val fileName = "${app.name.ifBlank { app.packageName }}_${app.version.releaseTag}.apk"
+            DebugLog.i("Download", "开始下载 APK：${app.apkUrl} 保存为 $fileName")
             _downloadTask.value =
                 DownloadTaskUi(appId = app.id, fileName = fileName, status = "正在测速挑选最快镜像…")
             var lastSampleMs = 0L
@@ -136,6 +143,7 @@ class StoreViewModel(
                     )
                 _lastDownloadedApk.value = file.absolutePath
                 _lastDownload.value = "已保存：${file.absolutePath}"
+                DebugLog.i("Download", "下载完成：${file.absolutePath}（${file.length()} 字节），拉起安装器")
                 promptInstall(context, file)
             } catch (e: Exception) {
                 _downloadTask.value =
@@ -144,6 +152,7 @@ class StoreViewModel(
                         done = true,
                     )
                 _lastDownload.value = "下载失败：${e.message}"
+                DebugLog.e("Download", "下载失败：${app.name} ${e.message ?: e::class.simpleName}")
             } finally {
                 _downloading.value = false
             }
@@ -156,6 +165,7 @@ class StoreViewModel(
         apk: File,
     ) {
         try {
+            DebugLog.i("Install", "拉起系统安装器：${apk.absolutePath}")
             val uri =
                 androidx.core.content.FileProvider.getUriForFile(
                     context,
@@ -171,6 +181,7 @@ class StoreViewModel(
             context.startActivity(intent)
         } catch (e: Exception) {
             _lastDownload.value = "安装引导失败：${e.message}"
+            DebugLog.e("Install", "安装引导失败：${e.message}")
         }
     }
 
@@ -180,16 +191,19 @@ class StoreViewModel(
         val apk = File(path)
         if (!apk.exists()) {
             _lastDownload.value = "已下载的 APK 文件不存在，请重新下载"
+            DebugLog.w("Install", "已下载 APK 文件不存在：$path")
             _lastDownloadedApk.value = null
             _downloadTask.value = null
             return
         }
         _lastDownload.value = "正在打开安装器：${apk.name}"
+        DebugLog.i("Install", "重新拉起安装器：${apk.absolutePath}")
         promptInstall(context, apk)
     }
 
     /** 手动触发后台静默同步（设置页"立即同步"），按结果提示 */
     fun refreshSilently(context: Context) {
+        DebugLog.i("Sync", "用户点击立即同步")
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.refresh() }
             // Toast 必须在主线程
@@ -235,15 +249,24 @@ class StoreViewModel(
 
     /** 首启同步失败后的重试（前台全量） */
     fun retryBootstrap() {
+        DebugLog.i("Sync", "用户点击重试同步（前台全量）")
         viewModelScope.launch {
             withContext(Dispatchers.IO) { repository.bootstrap() }
         }
     }
 
-    /** 客户端自身更新下载（GitLink 镜像加速）→ 校验后拉起安装 */
+    /** 下载客户端自身更新包（GitLink 镜像加速）→ 校验后拉起安装 */
     fun downloadUpdate(context: Context) {
-        val info = updateAvailable.value ?: return
-        if (_downloading.value) return
+        val info = updateAvailable.value
+        if (info == null) {
+            DebugLog.w("Update", "下载更新被点击但没有可用更新信息")
+            return
+        }
+        if (_downloading.value) {
+            DebugLog.w("Update", "已有下载任务进行中，忽略更新下载")
+            return
+        }
+        DebugLog.i("Update", "开始下载客户端更新：${info.versionName} <- ${info.downloadUrl}")
         viewModelScope.launch {
             _downloading.value = true
             try {
@@ -257,9 +280,11 @@ class StoreViewModel(
                         )
                     }
                 _lastDownload.value = "更新包已下载：${file.absolutePath}"
+                DebugLog.i("Update", "更新包下载完成：${file.absolutePath}（${file.length()} 字节）")
                 promptInstall(context, file)
             } catch (e: Exception) {
                 _lastDownload.value = "更新下载失败：${e.message}"
+                DebugLog.e("Update", "更新下载失败：${e.message ?: e::class.simpleName}")
             } finally {
                 _downloading.value = false
             }
