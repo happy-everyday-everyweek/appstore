@@ -39,13 +39,14 @@ class StoreViewModel(
     private val _downloading = MutableStateFlow(false)
     val downloading: StateFlow<Boolean> = _downloading.asStateFlow()
 
-    /** APK 下载任务实时状态（横条弹窗展示：进度/高采样速度折线图/状态） */
+    /** APK 下载任务实时状态（下载栏展示：进度/高采样速度折线图/状态） */
     data class DownloadTaskUi(
         val fileName: String = "",
         val progress: Float = 0f,
         val speedHistory: List<Long> = emptyList(), // 瞬时速度 B/s（高采样）
         val status: String = "准备中…",
         val done: Boolean = false,
+        val lastFile: String? = null, // 下载成功后的 APK 路径（供“安装/重装”按钮使用）
     )
 
     private val _downloadTask = MutableStateFlow<DownloadTaskUi?>(null)
@@ -53,6 +54,9 @@ class StoreViewModel(
 
     private val _lastDownload = MutableStateFlow<String?>(null)
     val lastDownload: StateFlow<String?> = _lastDownload.asStateFlow()
+
+    private val _lastDownloadedApk = MutableStateFlow<String?>(null)
+    val lastDownloadedApk: StateFlow<String?> = _lastDownloadedApk.asStateFlow()
 
     init {
         bootstrap()
@@ -127,7 +131,9 @@ class StoreViewModel(
                         progress = 1f,
                         status = "下载完成，正在打开安装器…",
                         done = true,
+                        lastFile = file.absolutePath,
                     )
+                _lastDownloadedApk.value = file.absolutePath
                 _lastDownload.value = "已保存：${file.absolutePath}"
                 promptInstall(context, file)
             } catch (e: Exception) {
@@ -165,6 +171,20 @@ class StoreViewModel(
         } catch (e: Exception) {
             _lastDownload.value = "安装引导失败：${e.message}"
         }
+    }
+
+    /** 重新拉起已下载 APK 的安装界面（下载完成按钮“安装”点击） */
+    fun reinstallLastDownload(context: Context) {
+        val path = _lastDownloadedApk.value ?: return
+        val apk = File(path)
+        if (!apk.exists()) {
+            _lastDownload.value = "已下载的 APK 文件不存在，请重新下载"
+            _lastDownloadedApk.value = null
+            _downloadTask.value = null
+            return
+        }
+        _lastDownload.value = "正在打开安装器：${apk.name}"
+        promptInstall(context, apk)
     }
 
     /** 手动触发后台静默同步（设置页"立即同步"），按结果提示 */
