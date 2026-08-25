@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#16324F</color>
+    <!-- 深色自适应背景：与客户端深色视觉一致；Android 13+ 开启主题图标后由系统按壁纸自动取色 -->
+    <color name="ic_launcher_background">#10141C</color>
 </resources>
