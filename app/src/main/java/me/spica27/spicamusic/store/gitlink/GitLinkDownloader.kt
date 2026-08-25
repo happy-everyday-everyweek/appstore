@@ -5,6 +5,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import me.spica27.spicamusic.store.DebugLog
 import me.spica27.spicamusic.store.Downloader
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -46,8 +47,14 @@ class GitLinkDownloader(
         expectedSha256: String?,
         onProgress: (Float) -> Unit,
     ): File {
+        DebugLog.i(
+            "Download",
+            "开始下载：$url 目标=${dest.name} sha256=${expectedSha256?.take(8) ?: "无"}",
+        )
+        val t0 = System.currentTimeMillis()
         onStage?.invoke("正在对 33 个镜像测速挑选最快源…")
         val ranked = rankMirrors(url)
+        DebugLog.i("Download", "镜像测速完成，候选（按评分降序）：${ranked.take(6).joinToString { it.name }}（共 ${ranked.size} 个）")
         val attempts = mutableListOf<String>()
         var lastErr: Throwable = IOException("无可用镜像")
         val total = minOf(ranked.size, maxMirrorAttempts)
@@ -76,15 +83,19 @@ class GitLinkDownloader(
                         throw IOException("SHA-256 不一致：期望 $expectedSha256，实际 $actual")
                     }
                 }
+                val cost = System.currentTimeMillis() - t0
+                DebugLog.i("Download", "镜像「${mirror.name}」下载成功 ${file.length()} 字节，耗时 ${cost}ms")
                 return file
             } catch (e: Exception) {
                 lastErr = e
                 attempts += "${mirror.name}:${e.message ?: e::class.simpleName}"
+                DebugLog.w("Download", "镜像「${mirror.name}」失败：${e.message ?: e::class.simpleName}")
                 dest.delete()
             }
         }
         // 聚合所有镜像失败原因，方便用户/诊断定位
         val detail = attempts.joinToString("；")
+        DebugLog.e("Download", "全部镜像失败（尝试 $total 个）：$detail")
         throw IOException("镜像全部失败（尝试 $total 个）：$detail", lastErr)
     }
 
