@@ -44,7 +44,6 @@ class ArticleScene(
                 me.spica27.spicamusic.store.StoreAssets
                     .file("articles/$rel")
                     ?.readText()
-                    ?.let { MarkdownPlain.render(it) }
                     ?: "（正文尚未随包同步，请稍后重试）"
             }
 
@@ -89,11 +88,8 @@ class ArticleScene(
                 androidx.compose.material3.HorizontalDivider(
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
-                Text(
-                    text = content,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+                me.spica27.spicamusic.ui.components
+                    .MarkdownContent(md = content)
                 Box(modifier = Modifier.fillMaxWidth().padding(bottom = 40.dp)) {}
             }
         }
