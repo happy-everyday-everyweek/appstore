@@ -211,39 +211,48 @@ fun MultiAppTodayCard(
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                metas.forEach { meta ->
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .clickable { onOpenApp(meta) }
-                                .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        me.spica27.spicamusic.ui.components
-                            .AppIcon(app = meta, size = 44.dp)
-                        Column(modifier = Modifier.weight(1f)) {
+                if (metas.isEmpty()) {
+                    Text(
+                        text = "应用数据待收录或正在同步，稍后自动出现",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
+                } else {
+                    metas.forEach { meta ->
+                        Row(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenApp(meta) }
+                                    .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            me.spica27.spicamusic.ui.components
+                                .AppIcon(app = meta, size = 44.dp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = meta.name.ifBlank { meta.packageName },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = meta.summary.ifBlank { meta.repo },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                             Text(
-                                text = meta.name.ifBlank { meta.packageName },
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = meta.summary.ifBlank { meta.repo },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                                text = meta.grade.label,
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MetaGradeColor(meta),
                             )
                         }
-                        Text(
-                            text = meta.grade.label,
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MetaGradeColor(meta),
-                        )
                     }
                 }
             }
