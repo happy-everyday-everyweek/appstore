@@ -53,6 +53,17 @@ object CrashHandler : Thread.UncaughtExceptionHandler {
     }
 
     private fun handleException(e: Throwable) {
+        // 0) 应用内日志同步一条崩溃记录（与 LogcatKeeper/落盘互补，设置页日志可直接看到）
+        runCatching {
+            me.spica27.spicamusic.store.DebugLog.e(
+                "Crash",
+                "未捕获异常：${e::class.simpleName} ${e.message}",
+            )
+            e.stackTrace.take(6).forEach { f ->
+                me.spica27.spicamusic.store.DebugLog
+                    .i("Crash", "  at $f")
+            }
+        }
         // 1) 崩溃日志落盘（私有目录 + 导出到 Download/DSH-crashlogs）
         saveCrashLog(e)
         // 2) 展示崩溃页
