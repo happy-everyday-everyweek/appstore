@@ -1,76 +1,71 @@
 package me.spica27.spicamusic.ui.components
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
+import com.mikepenz.markdown.coil3.Coil3ImageTransformerImpl
+import com.mikepenz.markdown.m3.Markdown
 import me.spica27.spicamusic.store.StoreAssets
-import me.spica27.spicamusic.ui.discover.MarkdownPlain
 
 /**
- * README/文章正文 Markdown 渲染：
- * - 文本行沿用 [MarkdownPlain] 轻量净化（标题/列表/粗体等符号剥离）；
- * - 图片行 `![alt](src)`：本地引用（`<id>_files/...`，承载包随包资产）映射到 StoreAssets 读取，
+ * README/文章正文 Markdown 渲染（mikepenz multiplatform-markdown-renderer，Material3 变体）：
+ * - 完整支持标题 / 列表 / 引用 / 表格 / 代码块 / 粗体斜体 / 链接 / 图片等 GFM 语法；
+ * - 图片加载走 coil3（[Coil3ImageTransformerImpl]）：
  *   网络引用（http/https）直接加载；
- * - 相对链接（如 `[x](docs/y.md)`）文本保留可读形式，不渲染成不可点的占位。
+ *   随包本地引用（`<id>_files/...`，聚合包 assets/readmes/ 下）在渲染前重写为 file:// 绝对路径；
+ *   无法解析的本地路径保留原文（不渲染成死链占位）。
  */
 @Composable
 fun MarkdownContent(
     md: String,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    val content = remember(md) { rewriteLocalImages(md) }
+    Markdown(
+        content = content,
+        imageTransformer = Coil3ImageTransformerImpl,
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        md.lineSequence().forEach { line ->
-            val imgSrc = imageLineSrc(line)
-            if (imgSrc != null) {
-                val model: Any? =
-                    if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
-                        imgSrc
-                    } else {
-                        StoreAssets.file("readmes/$imgSrc")
-                    }
-                if (model != null) {
-                    AsyncImage(
-                        model = model,
-                        contentDescription = null,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 320.dp)
-                                .padding(vertical = 6.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                    )
-                }
-            } else if (line.isNotBlank()) {
-                Text(
-                    text = MarkdownPlain.render(line),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-        }
-    }
+    )
 }
 
-/** 若该行是图片行（`![alt](src)`），返回 src；否则返回 null */
-private fun imageLineSrc(line: String): String? {
-    val t = line.trim()
-    if (!t.startsWith("![")) return null
-    val close = t.indexOf("](")
-    if (close < 0) return null
-    val end = t.indexOf(')', close + 2)
-    if (end < 0) return null
-    return t.substring(close + 2, end).trim().ifBlank { null }
+/** Markdown 图片引用重写：`![](<src>)` 与 `<img src="<src>">` 中的本地相对路径 → file:// URI */
+private fun rewriteLocalImages(md: String): String {
+    if (md.isBlank()) return md
+    var out = md
+    // 标准图片语法 ![](src)
+    out =
+        MARKDOWN_IMAGE_REGEX.replace(out) { match ->
+            val src = match.groupValues[1].trim()
+            val resolved = resolveLocalImage(src)
+            if (resolved != null) {
+                "![${match.groupValues[2].trim()}](file://$resolved)"
+            } else {
+                match.value
+            }
+        }
+    // HTML <img src="...">（部分 README 使用；仅本地引用重写，网络原样保留）
+    out =
+        HTML_IMG_REGEX.replace(out) { match ->
+            val src = match.groupValues[1].trim()
+            val resolved = resolveLocalImage(src)
+            if (resolved != null) {
+                "<img src=\"file://$resolved\">"
+            } else {
+                match.value
+            }
+        }
+    return out
 }
+
+private fun resolveLocalImage(src: String): String? {
+    val s = src.removePrefix("\"").removeSuffix("\"")
+    if (s.startsWith("http://") || s.startsWith("https://") || s.startsWith("file://")) return null
+    // 避免路径穿越
+    if (s.contains("..")) return null
+    // 聚合包把 README 资源放在 assets/readmes/<id>_files/ 下，README 内引用前缀为 <id>_files/
+    val file = StoreAssets.file("readmes/$s")
+    return file?.takeIf { it.exists() }?.absolutePath
+}
+
+private val MARKDOWN_IMAGE_REGEX = Regex("""!\[([^\]]*)\]\(([^)\s]+)\)""")
+private val HTML_IMG_REGEX = Regex("""<img\s+src=["']([^"']+)["'][^>]*>""", RegexOption.IGNORE_CASE)
