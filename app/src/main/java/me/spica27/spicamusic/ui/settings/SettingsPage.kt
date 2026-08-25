@@ -151,7 +151,7 @@ fun SettingsPage() {
         }
 
         SettingsCard(title = "客户端自身更新") {
-            // 规格：打开应用时静默查询新版本并提示，无手动检查入口
+            // 与「关于」版本号融合：点击版本号触发检查，结果在此展示（规格：静默查询，无手动入口）
             val update = updateAvailable
             if (update != null) {
                 SettingRow(
@@ -165,13 +165,13 @@ fun SettingsPage() {
                 SettingRow(
                     icon = Icons.Default.SystemUpdate,
                     title = "已是最新版本",
-                    subtitle = "内置自身 GitHub 仓库，独立于商店收录",
+                    subtitle = "点击「关于」中的版本号可手动检查",
                 )
             }
         }
 
         SettingsCard(title = "关于") {
-            // 版本号：连续点击 5 次进入调试模式
+            // 版本号：单击立即检查客户端自身更新；连续点击 5 次进入调试模式
             var tapCount by remember { mutableIntStateOf(0) }
             var lastTap by remember { mutableLongStateOf(0L) }
             val debugMode by remember { mutableStateOf(false) }
@@ -188,6 +188,8 @@ fun SettingsPage() {
                                 Toast.makeText(context, "调试模式已开启", Toast.LENGTH_SHORT).show()
                                 debugModeState = true
                             }
+                            // 版本号与客户端自身更新融合：每单击即检查一次
+                            viewModel.checkSelfUpdate(context)
                         }.padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -209,6 +211,12 @@ fun SettingsPage() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                Text(
+                    text = "检查更新",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
             }
             SettingRow(
                 icon = Icons.AutoMirrored.Filled.OpenInNew,
