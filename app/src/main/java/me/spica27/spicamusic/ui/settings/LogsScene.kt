@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -39,14 +40,20 @@ import me.spica27.navkit.path.LocalNavigationPath
 import me.spica27.navkit.scene.StackScene
 import me.spica27.spicamusic.store.DebugLog
 
-/** 日志查看页：展示环形日志，支持复制 / 导出 / 清空 */
+/** 日志查看页：展示环形日志，支持按等级筛选（信息/警告/错误）、复制 / 导出 / 清空 */
 class LogsScene : StackScene() {
     @Composable
     override fun Content() {
         val path = LocalNavigationPath.current
         val context = LocalContext.current
         var revision by remember { mutableStateOf(0) }
-        val entries = remember(revision) { DebugLog.snapshot() }
+        // 等级筛选：null=全部；否则只显示该等级
+        var filter by remember { mutableStateOf<String?>(null) }
+        val all = remember(revision) { DebugLog.snapshot() }
+        val entries =
+            remember(revision, filter) {
+                if (filter == null) all else all.filter { it.level == filter }
+            }
 
         Column(
             modifier =
@@ -97,6 +104,23 @@ class LogsScene : StackScene() {
                     revision++
                 }) { Text("清空") }
             }
+            // 等级筛选：全部 / 信息 / 警告 / 错误
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                LevelChip(label = "全部", selected = filter == null, onClick = { filter = null })
+                LevelChip(label = "信息", selected = filter == "I", onClick = { filter = "I" })
+                LevelChip(label = "警告", selected = filter == "W", onClick = { filter = "W" })
+                LevelChip(label = "错误", selected = filter == "E", onClick = { filter = "E" })
+            }
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp)) {
+                Text(
+                    text = "${entries.size} 条记录",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 if (entries.isEmpty()) {
                     item {
@@ -108,17 +132,12 @@ class LogsScene : StackScene() {
                         )
                     }
                 }
-                items(entries, key = { it.time + it.tag + it.message.length }) { entry ->
+                items(entries, key = { it.time + it.tag + it.label + it.message.length }) { entry ->
                     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
                         Text(
-                            text = "[${entry.time}] ${entry.level}/${entry.tag}",
+                            text = "[${entry.time}] ${entry.label} ${entry.tag}",
                             style = MaterialTheme.typography.labelSmall,
-                            color =
-                                if (entry.level == "E") {
-                                    MaterialTheme.colorScheme.error
-                                } else {
-                                    MaterialTheme.colorScheme.primary
-                                },
+                            color = LevelColor(entry.level),
                         )
                         Text(
                             text = entry.message,
@@ -132,5 +151,50 @@ class LogsScene : StackScene() {
                 item { Spacer(modifier = Modifier.height(48.dp)) }
             }
         }
+    }
+}
+
+/** 等级筛选小按钮 */
+@Composable
+private fun LevelChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    androidx.compose.material3.Surface(
+        onClick = onClick,
+        shape =
+            androidx.compose.foundation.shape
+                .RoundedCornerShape(10.dp),
+        color =
+            if (selected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color =
+                if (selected) {
+                    MaterialTheme.colorScheme.onPrimary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+        )
+    }
+}
+
+/** 等级配色：信息/调试=主色，警告=橙，错误=红，冗余=灰 */
+@Composable
+private fun LevelColor(code: String): Color {
+    val scheme = MaterialTheme.colorScheme
+    return when (code) {
+        "E" -> scheme.error
+        "W" -> Color(0xFFE6A23C)
+        "D", "V" -> scheme.onSurfaceVariant
+        else -> scheme.primary
     }
 }
