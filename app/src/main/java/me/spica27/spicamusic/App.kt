@@ -31,6 +31,13 @@ class App : Application() {
             Timber.plant(Timber.DebugTree())
         }
 
+        // 启动埋点：版本/系统/设备信息进应用内日志，便于远程定位
+        me.spica27.spicamusic.store.DebugLog.i(
+            "App",
+            "应用启动 v${BuildConfig.VERSION_NAME}(${BuildConfig.VERSION_CODE}) SDK=${android.os.Build.VERSION.SDK_INT} " +
+                "设备=${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+        )
+
         // 初始化 Koin 依赖注入
         startKoin {
             androidLogger()
