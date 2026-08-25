@@ -51,9 +51,17 @@ object AppIndexParser {
                 versionCode = version?.get("versionCode")?.jsonPrimitive?.longOrNull ?: 0,
                 releaseTag = version?.get("releaseTag")?.jsonPrimitive?.contentOrNull ?: "",
             ),
-            license = source?.get("license")?.jsonPrimitive?.contentOrNull,
-            apkUrl = source?.get("apkUrl")?.jsonPrimitive?.contentOrNull ?: "",
-            apkSha256 = source?.get("sha256")?.jsonPrimitive?.contentOrNull ?: "",
+            license =
+                source?.get("license")?.jsonPrimitive?.contentOrNull
+                    ?: obj["license"]?.jsonPrimitive?.contentOrNull,
+            apkUrl =
+                source?.get("apkUrl")?.jsonPrimitive?.contentOrNull
+                    ?: obj["apkUrl"]?.jsonPrimitive?.contentOrNull
+                    ?: "",
+            apkSha256 =
+                source?.get("sha256")?.jsonPrimitive?.contentOrNull
+                    ?: obj["apkSha256"]?.jsonPrimitive?.contentOrNull
+                    ?: "",
         )
     }
 
