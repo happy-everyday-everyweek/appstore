@@ -1,5 +1,7 @@
 package me.spica27.spicamusic.store
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -14,19 +16,26 @@ import me.spica27.spicamusic.common.entity.appstore.ChangeDetector
 import me.spica27.spicamusic.common.entity.appstore.ChangeSet
 import me.spica27.spicamusic.common.entity.appstore.PatchManifest
 import me.spica27.spicamusic.common.entity.appstore.PatchManifestParser
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
+import java.util.concurrent.TimeUnit
 import java.util.zip.ZipInputStream
 
 /**
- * 市场同步引擎（全 GitLink 直链模式，零 GitHub API）：
+ * 市场同步引擎（GitHub 直链模式，零 API）：
  * - Release 发现 = "/releases/latest/download/patch.json" 直链（GitHub 官方 latest 重定向）
  * - 增量包 / 全量包 = 同域名直链资产
- * - 下载全部经 [Downloader]（GitLink 33 镜像测速、断点续传、空文件换源）
+ * - 下载全部经 [Downloader]（33 镜像测速、断点续传、空文件换源）
  * - 生命周期埋点进 [DebugLog]，失败携带 errorMessage（URL/镜像/解析详情）
  */
 class SyncEngine(
     private val downloader: Downloader,
     private val store: SyncStore,
+    /** 链式回溯时 patch.json 的轻量获取器：默认直连 GitHub 短超时（不走 33 镜像
+     *  测速，几字节清单不值得）；失败返回 null，由调用方回退全量。测试可注入。 */
+    private val quickFetchText: suspend (url: String) -> String? =
+        SyncEngine::quickFetchPatchDefault,
 ) {
     /** 下载进度回调（0f~1f；一次同步内多次资产下载会刷新） */
     var onProgress: ((Float) -> Unit)? = null
@@ -34,7 +43,7 @@ class SyncEngine(
     /** 流程阶段回调（供首启引导/设置页展示具体步骤文案） */
     var onStage: ((String) -> Unit)? = null
 
-    /** 桥接 GitLink 下载器的内部阶段（测速/逐镜像尝试） */
+    /** 桥接下载器的内部阶段（测速/逐镜像尝试） */
     init {
         (downloader as? me.spica27.spicamusic.store.gitlink.GitLinkDownloader)
             ?.onStage = { s -> onStage?.invoke(s) }
@@ -113,7 +122,9 @@ class SyncEngine(
     }
 
     /** 解析增量路径：从 latest patch 沿 base 逐级回溯上一 Release 的 patch.json，
-     *  直到某级 base 与本地版本匹配；返回按应用顺序（旧→新）的完整增量链。 */
+     *  直到某级 base 与本地版本匹配；返回按应用顺序（旧→新）的完整增量链。
+     *  链长超过 [CHAIN_LIMIT] 直接放弃（多级增量总下载量通常已超过最新全量包，
+     *  且逐级应用耗时随级数线性放大，落后过远时全量一次到位更划算）。 */
     private suspend fun resolveIncrementalChain(
         channel: SyncChannel,
         last: String?,
@@ -123,24 +134,28 @@ class SyncEngine(
         val chain = ArrayDeque<PatchManifest>()
         var cur = latest
         var guard = 0
-        while (guard++ < MAX_CHAIN_LENGTH) {
+        while (guard++ < CHAIN_LIMIT) {
             val curBase = cur.base ?: return null
             chain.addFirst(cur)
             if (curBase == last) return chain.toList()
             val prevText =
                 try {
-                    downloadAsset(
-                        channel,
-                        releaseBaseUrl(channel, curBase) + "/patch.json",
-                        "patch-$curBase.json",
-                    )
+                    // 轻量获取：直连短超时，不做 33 镜像测速（patch.json 仅几十字节）
+                    quickFetchText(releaseBaseUrl(channel, curBase) + "/patch.json")
                 } catch (e: Exception) {
                     DebugLog.i(
                         "Sync",
                         "[${channel.name}] 链式回溯 $curBase/patch.json 失败(${e.message})，改走全量",
                     )
-                    return null
+                    null
                 }
+            if (prevText == null) {
+                DebugLog.i(
+                    "Sync",
+                    "[${channel.name}] 链式回溯 $curBase/patch.json 不可得（${CHAIN_LIMIT} 级内未匹配），改走全量",
+                )
+                return null
+            }
             val prev = runCatching { PatchManifestParser.parse(prevText) }.getOrNull() ?: return null
             // 链连续性校验：上一级 target 必须等于本级 base，且算法一致
             if (prev.target != curBase ||
@@ -362,8 +377,40 @@ class SyncEngine(
         const val INCREMENTAL_ZIP = "incremental.zip"
         const val ASSETS_PREFIX = "assets/"
 
-        /** 链式增量回溯最大级数（防异常链路死循环） */
-        const val MAX_CHAIN_LENGTH = 20
+        /** 链式增量回溯最大级数：超过即放弃走全量。
+         *  多级链每级都要下载增量包并重新合并 JSON，耗时/流量随级数线性放大；
+         *  落后 3 级以上时，最新全量包一次下载通常更快（且跳过全部断裂风险）。
+         *  服务端 patch.base 恒为上一 Release，客户端落后 N 级即 N+1 级链，
+         *  CHAIN_LIMIT=3 意味着本地版本落后 2 个版本以内才走链式增量。 */
+        const val CHAIN_LIMIT = 3
+
+        /** 默认 patch.json 轻量获取器：直连 GitHub CDN，短超时，不做镜像测速。
+         *  patch.json 仅几十字节，多镜像测速（约 6s）反而拖慢链式回溯。 */
+        private suspend fun quickFetchPatchDefault(url: String): String? =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val client =
+                        patchClient
+                            ?: OkHttpClient
+                                .Builder()
+                                .connectTimeout(4, TimeUnit.SECONDS)
+                                .readTimeout(10, TimeUnit.SECONDS)
+                                .build()
+                                .also { patchClient = it }
+                    val req =
+                        Request
+                            .Builder()
+                            .url(url)
+                            .header("User-Agent", "AppStore/1.0 (Android)")
+                            .build()
+                    client.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) null else resp.body?.string()
+                    }
+                }.getOrNull()
+            }
+
+        @Volatile
+        private var patchClient: OkHttpClient? = null
 
         /** 解压条目中是否存在资产（index/incremental 之外的键，兼容带/不带 assets/ 前缀） */
         private fun hasAssetEntries(entries: Map<String, ByteArray>): Boolean =
