@@ -79,8 +79,11 @@ object DebugLog {
         val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
         buffer.addLast(Entry(ts, tag, level.code, level.label, message))
         while (buffer.size > MAX_ENTRIES) buffer.removeFirst()
-        // 同步输出 Logcat（Tag 前缀 AppStore/），便于 adb 无线调试抓取
-        android.util.Log.println(level.androidLevel, "AppStore/$tag", message)
+        // 同步输出 Logcat（Tag 前缀 AppStore/），便于 adb 无线调试抓取；
+        // 单测/JVM 环境下 android.util.Log 不可用，忽略以保证埋点不炸
+        runCatching {
+            android.util.Log.println(level.androidLevel, "AppStore/$tag", message)
+        }
     }
 
     @Synchronized
