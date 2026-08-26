@@ -416,8 +416,10 @@ private fun DownloadBar(
     onReinstall: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val completed = task?.done == true && !task.status.startsWith("下载失败") && task.lastFile != null
-    val failed = task?.done == true && task.status.startsWith("下载失败")
+    // 任务归属当前应用才展示完成/失败态，避免 A 下载完成后占用 B 详情的下载栏
+    val isThisTask = task?.appId == app.id
+    val completed = isThisTask && task?.done == true && !task.status.startsWith("下载失败") && task.lastFile != null
+    val failed = isThisTask && task?.done == true && task.status.startsWith("下载失败")
     val barColor = Color(0xFF14181D)
     Surface(
         modifier = modifier.fillMaxWidth(),
