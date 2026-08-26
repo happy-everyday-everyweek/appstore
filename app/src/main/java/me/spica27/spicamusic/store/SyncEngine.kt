@@ -91,27 +91,114 @@ class SyncEngine(
             return SyncResult(changed = false, applied = PackageKind.None)
         }
         val canIncremental = patch.base == last && patch.algorithm == ALGORITHM
-        DebugLog.i("Sync", "[${channel.name}] 选择 ${if (canIncremental) "增量" else "全量"}包")
-        onStage?.invoke(
-            "正在下载${if (canIncremental) "增量" else "全量"}数据（${channel.name}）…",
-        )
-        return if (canIncremental) {
-            applyIncremental(channel, baseUrl, patch)
-        } else {
-            applyFull(channel, baseUrl, patch)
+        if (canIncremental) {
+            DebugLog.i("Sync", "[${channel.name}] 选择 增量包")
+            onStage?.invoke("正在下载增量数据（${channel.name}）…")
+            return applyIncremental(channel, baseUrl, baseUrl, patch)
         }
+        // 直接增量不可用（latest.base 与本地版本不匹配）：解析增量路径，
+        // 沿 base 逐级回溯历史 Release 的 patch.json，直到某级 base 与本地版本匹配，
+        // 再按路径顺序（旧→新）逐个下载并应用增量包；任一级失败回退最新全量包。
+        val chain = resolveIncrementalChain(channel, last, patch)
+        if (chain != null) {
+            DebugLog.i(
+                "Sync",
+                "[${channel.name}] 选择 链式增量包（${chain.size} 级：${chain.joinToString(" -> ") { it.target ?: "?" }}）",
+            )
+            return applyChain(channel, chain, baseUrl, patch)
+        }
+        DebugLog.i("Sync", "[${channel.name}] 选择 全量包")
+        onStage?.invoke("正在下载全量数据（${channel.name}）…")
+        return applyFull(channel, baseUrl, patch)
     }
+
+    /** 解析增量路径：从 latest patch 沿 base 逐级回溯上一 Release 的 patch.json，
+     *  直到某级 base 与本地版本匹配；返回按应用顺序（旧→新）的完整增量链。 */
+    private suspend fun resolveIncrementalChain(
+        channel: SyncChannel,
+        last: String?,
+        latest: PatchManifest,
+    ): List<PatchManifest>? {
+        if (latest.algorithm != ALGORITHM || latest.base.isNullOrBlank() || latest.base == "none") return null
+        val chain = ArrayDeque<PatchManifest>()
+        var cur = latest
+        var guard = 0
+        while (guard++ < MAX_CHAIN_LENGTH) {
+            val curBase = cur.base ?: return null
+            chain.addFirst(cur)
+            if (curBase == last) return chain.toList()
+            val prevText =
+                try {
+                    downloadAsset(
+                        channel,
+                        releaseBaseUrl(channel, curBase) + "/patch.json",
+                        "patch-$curBase.json",
+                    )
+                } catch (e: Exception) {
+                    DebugLog.i(
+                        "Sync",
+                        "[${channel.name}] 链式回溯 $curBase/patch.json 失败(${e.message})，改走全量",
+                    )
+                    return null
+                }
+            val prev = runCatching { PatchManifestParser.parse(prevText) }.getOrNull() ?: return null
+            // 链连续性校验：上一级 target 必须等于本级 base，且算法一致
+            if (prev.target != curBase ||
+                prev.algorithm != ALGORITHM ||
+                prev.base.isNullOrBlank() ||
+                prev.base == "none"
+            ) {
+                DebugLog.i(
+                    "Sync",
+                    "[${channel.name}] 增量链断裂于 $curBase（prev.target=${prev.target}），改走全量",
+                )
+                return null
+            }
+            cur = prev
+        }
+        return null
+    }
+
+    /** 按增量路径顺序应用每一级增量包；任一级失败（已内部回退最新全量）即终止并返回其结果 */
+    private suspend fun applyChain(
+        channel: SyncChannel,
+        chain: List<PatchManifest>,
+        fullFallbackUrl: String,
+        latestPatch: PatchManifest,
+    ): SyncResult {
+        chain.forEachIndexed { i, p ->
+            val target = p.target ?: return applyFull(channel, fullFallbackUrl, latestPatch)
+            DebugLog.i("Sync", "[${channel.name}] 链式应用第 ${i + 1}/${chain.size} 级增量（${p.base} -> $target）")
+            onStage?.invoke("正在下载增量数据（${channel.name}，${i + 1}/${chain.size}）…")
+            val r = applyIncremental(channel, releaseBaseUrl(channel, target), fullFallbackUrl, p)
+            if (r.applied != PackageKind.Incremental) {
+                // 某级增量失败且已回退最新全量成功：全量内容为最新，版本号需记录为最新 target
+                if (r.applied == PackageKind.Full) {
+                    store.writeVersion(channel, latestPatch.target ?: latestPatch.base ?: "")
+                }
+                return r
+            }
+        }
+        return SyncResult(changed = true, applied = PackageKind.Incremental)
+    }
+
+    /** 指定 Release tag 的资产直链基址 */
+    private fun releaseBaseUrl(
+        channel: SyncChannel,
+        tag: String,
+    ): String = "https://github.com/${channel.repo}/releases/download/$tag"
 
     private suspend fun applyIncremental(
         channel: SyncChannel,
-        baseUrl: String,
+        releaseUrl: String,
+        fullFallbackUrl: String,
         patch: PatchManifest,
     ): SyncResult {
-        if (patch.incrementalSha256.isBlank()) return applyFull(channel, baseUrl, patch)
+        if (patch.incrementalSha256.isBlank()) return applyFull(channel, fullFallbackUrl, patch)
         return runCatching {
             val zip =
                 downloader.download(
-                    "$baseUrl/incremental.zip",
+                    "$releaseUrl/incremental.zip",
                     tmpFile(channel, "inc.zip"),
                     patch.incrementalSha256.takeIf { it.isNotBlank() },
                     onProgress = { onProgress?.invoke(it) },
@@ -125,14 +212,14 @@ class SyncEngine(
             val merged = ChangeDetector.apply(base, change)
             if (merged.size < base.size - change.removed.size) {
                 zip.delete()
-                return applyFull(channel, baseUrl, patch)
+                return applyFull(channel, fullFallbackUrl, patch)
             }
             store.writeCachedText(channel, serializeIndex(merged))
             // 兜底：增量包若不含任何资产（历史发布物），补齐资产必须走全量
             if (!hasAssetEntries(entries)) {
                 zip.delete()
                 DebugLog.i("Sync", "[${channel.name}] 增量包无资产，回退全量以补齐图标/README/文章/封面")
-                return applyFull(channel, baseUrl, patch)
+                return applyFull(channel, fullFallbackUrl, patch)
             }
             store.writeAssets(entries.filterKeys { it != "incremental.json" })
             store.writeVersion(channel, patch.target ?: patch.base ?: "")
@@ -142,7 +229,7 @@ class SyncEngine(
             // 增量包获取/解析/校验失败一律兜底全量（保证同步不空转、数据一致）；
             // 若全量也失败，把增量原因一并透传，便于定位真实故障
             DebugLog.i("Sync", "[${channel.name}] 增量失败(${e.message})，回退全量")
-            val full = applyFull(channel, baseUrl, patch)
+            val full = applyFull(channel, fullFallbackUrl, patch)
             if (full.error == null) {
                 full
             } else {
@@ -274,6 +361,9 @@ class SyncEngine(
         const val FULL_ZIP = "full.zip"
         const val INCREMENTAL_ZIP = "incremental.zip"
         const val ASSETS_PREFIX = "assets/"
+
+        /** 链式增量回溯最大级数（防异常链路死循环） */
+        const val MAX_CHAIN_LENGTH = 20
 
         /** 解压条目中是否存在资产（index/incremental 之外的键，兼容带/不带 assets/ 前缀） */
         private fun hasAssetEntries(entries: Map<String, ByteArray>): Boolean =
