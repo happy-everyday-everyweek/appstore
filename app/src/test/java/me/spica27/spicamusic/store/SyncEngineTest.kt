@@ -14,7 +14,7 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 /**
- * SyncEngine 测试（全 GitLink 直链模式）：
+ * SyncEngine 测试（GitHub 直链模式）：
  * fake Downloader 按 URL 分发资产，验证 patch.target/base 驱动的
  * 全量 / 增量 / 幂等 / target 为空 / 网络失败五类路径。
  */
@@ -73,6 +73,17 @@ class SyncEngineTest {
 
     private fun indexJson(vararg ids: String): String =
         "{" + ids.joinToString(",") { "\"$it\":{\"id\":\"$it\",\"name\":\"app-$it\",\"repo\":\"owner/repo\"}" } + "}"
+
+    /** 构建引擎：链式回溯的 patch.json 走注入的快速获取器（测内走内存数据，不触网） */
+    private fun buildEngine(
+        root: SyncStore,
+        files: Map<String, ByteArray>,
+    ): SyncEngine =
+        SyncEngine(
+            FakeDownloader(files),
+            root,
+            quickFetchText = { url -> files[url]?.toString(Charsets.UTF_8) },
+        )
 
     @Test
     fun `patch 不可达时返回网络错误`() =
@@ -136,7 +147,7 @@ class SyncEngineTest {
                     downloadBase("aggregate-2") + "/incremental.zip" to incZip("1003"),
                     downloadBase("aggregate-3") + "/incremental.zip" to incZip("1004"),
                 )
-            val engine = SyncEngine(FakeDownloader(files), root)
+            val engine = buildEngine(root, files)
             val result = engine.sync(SyncChannel.AppIndex)
             assertTrue("detail: ${result.errorMessage}", result.applied == PackageKind.Incremental)
             assertTrue(result.changed)
@@ -162,7 +173,7 @@ class SyncEngineTest {
                         patchJson("aggregate-1", "aggregate-2").toByteArray(),
                     baseUrl() + "/full.zip" to zipOf("index.json" to indexJson("2001", "2002")),
                 )
-            val engine = SyncEngine(FakeDownloader(files), root)
+            val engine = buildEngine(root, files)
             val result = engine.sync(SyncChannel.AppIndex)
             assertEquals(PackageKind.Full, result.applied)
             assertTrue(result.changed)
@@ -189,7 +200,7 @@ class SyncEngineTest {
                     downloadBase("aggregate-1") + "/incremental.zip" to incZip("1002"),
                     baseUrl() + "/full.zip" to zipOf("index.json" to indexJson("2001", "2002")),
                 )
-            val engine = SyncEngine(FakeDownloader(files), root)
+            val engine = buildEngine(root, files)
             val result = engine.sync(SyncChannel.AppIndex)
             assertEquals(PackageKind.Full, result.applied)
             assertTrue(result.changed)
@@ -197,6 +208,39 @@ class SyncEngineTest {
             assertNotNull(cached)
             assertTrue(cached!!.contains("2001"))
             assertEquals("aggregate-3", root.readVersion(SyncChannel.AppIndex))
+        }
+
+    @Test
+    fun `链长超过上限时直接回退全量包`() =
+        runTest {
+            val root = SyncStore(tmp.newFolder())
+            root.writeCachedText(SyncChannel.AppIndex, indexJson("1001"))
+            root.writeVersion(SyncChannel.AppIndex, "aggregate-0")
+            // 本地落后 3 个版本（0 -> 1 -> 2 -> 3 -> 4），链长 4 超过 CHAIN_LIMIT=3。
+            // 即使各级增量包完整存在，也必须走全量（逐级应用数小时/数天，一次全量分钟级）。
+            val files =
+                mapOf(
+                    baseUrl() + "/patch.json" to patchJson("aggregate-3", "aggregate-4").toByteArray(),
+                    downloadBase("aggregate-3") + "/patch.json" to
+                        patchJson("aggregate-2", "aggregate-3").toByteArray(),
+                    downloadBase("aggregate-2") + "/patch.json" to
+                        patchJson("aggregate-1", "aggregate-2").toByteArray(),
+                    downloadBase("aggregate-1") + "/patch.json" to
+                        patchJson("aggregate-0", "aggregate-1").toByteArray(),
+                    downloadBase("aggregate-1") + "/incremental.zip" to incZip("1002"),
+                    downloadBase("aggregate-2") + "/incremental.zip" to incZip("1003"),
+                    downloadBase("aggregate-3") + "/incremental.zip" to incZip("1004"),
+                    downloadBase("aggregate-4") + "/incremental.zip" to incZip("1005"),
+                    baseUrl() + "/full.zip" to zipOf("index.json" to indexJson("2001", "2002")),
+                )
+            val engine = buildEngine(root, files)
+            val result = engine.sync(SyncChannel.AppIndex)
+            assertEquals(PackageKind.Full, result.applied)
+            assertTrue(result.changed)
+            val cached = root.readCachedText(SyncChannel.AppIndex)
+            assertNotNull(cached)
+            assertTrue("应应用全量索引而非链式增量", cached!!.contains("2001"))
+            assertEquals("aggregate-4", root.readVersion(SyncChannel.AppIndex))
         }
 
     @Test
