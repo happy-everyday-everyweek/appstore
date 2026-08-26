@@ -36,6 +36,10 @@ class SyncEngine(
      *  测速，几字节清单不值得）；失败返回 null，由调用方回退全量。测试可注入。 */
     private val quickFetchText: suspend (url: String) -> String? =
         SyncEngine::quickFetchPatchDefault,
+    /** 链式回溯时对 Release 资产的体积探测（HEAD Content-Length，GitHub CDN 无
+     *  源站式限流）；失败返回 null 表示大小未知。用于「增量累计 vs 全量」决策。 */
+    private val quickHeadSize: suspend (url: String) -> Long? =
+        SyncEngine::quickHeadSizeDefault,
 ) {
     /** 下载进度回调（0f~1f；一次同步内多次资产下载会刷新） */
     var onProgress: ((Float) -> Unit)? = null
@@ -108,7 +112,11 @@ class SyncEngine(
         // 直接增量不可用（latest.base 与本地版本不匹配）：解析增量路径，
         // 沿 base 逐级回溯历史 Release 的 patch.json，直到某级 base 与本地版本匹配，
         // 再按路径顺序（旧→新）逐个下载并应用增量包；任一级失败回退最新全量包。
-        val chain = resolveIncrementalChain(channel, last, patch)
+        // 决策依据是字节数而非级数：回溯时累积各级增量包体积，一旦累计 ≥ 最新
+        // 全量包体积立即转全量（避免“增量越小越该走链、越大越该全量”被级数误杀）。
+        val fullSize =
+            runCatching { quickHeadSize("$baseUrl/full.zip") }.getOrNull()
+        val chain = resolveIncrementalChain(channel, last, patch, fullSize)
         if (chain != null) {
             DebugLog.i(
                 "Sync",
@@ -123,19 +131,52 @@ class SyncEngine(
 
     /** 解析增量路径：从 latest patch 沿 base 逐级回溯上一 Release 的 patch.json，
      *  直到某级 base 与本地版本匹配；返回按应用顺序（旧→新）的完整增量链。
-     *  链长超过 [CHAIN_LIMIT] 直接放弃（多级增量总下载量通常已超过最新全量包，
-     *  且逐级应用耗时随级数线性放大，落后过远时全量一次到位更划算）。 */
+     *  转全量条件（任一命中）：
+     *   1) 链上存在 target 缺失的级（该级无法下载增量包）；
+     *   2) 各级增量包体积累计 ≥ 最新全量包体积（fullSize 已知时）——增量不小
+     *      于全量时逐级应用纯属浪费；
+     *   3) 大小未知的级数超过 [UNKNOWN_SIZE_LIMIT]（无法预估就保守全量，防盲下载）；
+     *   4) 级数超过 [MAX_CHAIN_LENGTH]（绝对防死循环）。 */
     private suspend fun resolveIncrementalChain(
         channel: SyncChannel,
         last: String?,
         latest: PatchManifest,
+        fullSize: Long?,
     ): List<PatchManifest>? {
         if (latest.algorithm != ALGORITHM || latest.base.isNullOrBlank() || latest.base == "none") return null
         val chain = ArrayDeque<PatchManifest>()
         var cur = latest
         var guard = 0
-        while (guard++ < CHAIN_LIMIT) {
+        var incTotal = 0L
+        var unknown = 0
+        while (guard++ < MAX_CHAIN_LENGTH) {
             val curBase = cur.base ?: return null
+            // 本级增量包体积（链上每级下载 releaseBaseUrl(target)/incremental.zip，
+            // HEAD 与下载同 URL；GitHub CDN 的 HEAD 无源站式限流）。
+            // 注意：探测先于匹配判断——curBase 命中本地版本的匹配级同样要下载
+            // 增量包应用，其体积未知也必须计入 unknown，否则最后一级会漏数。
+            val target = cur.target
+            val incSize =
+                if (target.isNullOrBlank()) {
+                    null
+                } else {
+                    quickHeadSize(releaseBaseUrl(channel, target) + "/incremental.zip")
+                }
+            if (incSize != null && incSize > 0) incTotal += incSize else unknown++
+            if (fullSize != null && fullSize > 0 && incTotal >= fullSize) {
+                DebugLog.i(
+                    "Sync",
+                    "[${channel.name}] 增量累计 ${incTotal}B ≥ 全量 ${fullSize}B，改走全量",
+                )
+                return null
+            }
+            if (unknown > UNKNOWN_SIZE_LIMIT) {
+                DebugLog.i(
+                    "Sync",
+                    "[${channel.name}] 链上 $unknown 级增量大小未知，保守改走全量",
+                )
+                return null
+            }
             chain.addFirst(cur)
             if (curBase == last) return chain.toList()
             val prevText =
@@ -152,7 +193,7 @@ class SyncEngine(
             if (prevText == null) {
                 DebugLog.i(
                     "Sync",
-                    "[${channel.name}] 链式回溯 $curBase/patch.json 不可得（${CHAIN_LIMIT} 级内未匹配），改走全量",
+                    "[${channel.name}] 链式回溯 $curBase/patch.json 不可得，改走全量",
                 )
                 return null
             }
@@ -377,12 +418,11 @@ class SyncEngine(
         const val INCREMENTAL_ZIP = "incremental.zip"
         const val ASSETS_PREFIX = "assets/"
 
-        /** 链式增量回溯最大级数：超过即放弃走全量。
-         *  多级链每级都要下载增量包并重新合并 JSON，耗时/流量随级数线性放大；
-         *  落后 3 级以上时，最新全量包一次下载通常更快（且跳过全部断裂风险）。
-         *  服务端 patch.base 恒为上一 Release，客户端落后 N 级即 N+1 级链，
-         *  CHAIN_LIMIT=3 意味着本地版本落后 2 个版本以内才走链式增量。 */
-        const val CHAIN_LIMIT = 3
+        /** 链式增量回溯绝对级数上限（防异常链路死循环） */
+        const val MAX_CHAIN_LENGTH = 20
+
+        /** 大小未知的增量级数上限：超过即保守转全量（无法预估流量时禁止盲下载） */
+        const val UNKNOWN_SIZE_LIMIT = 5
 
         /** 默认 patch.json 轻量获取器：直连 GitHub CDN，短超时，不做镜像测速。
          *  patch.json 仅几十字节，多镜像测速（约 6s）反而拖慢链式回溯。 */
@@ -405,6 +445,32 @@ class SyncEngine(
                             .build()
                     client.newCall(req).execute().use { resp ->
                         if (!resp.isSuccessful) null else resp.body?.string()
+                    }
+                }.getOrNull()
+            }
+
+        /** 默认 Release 资产体积探测：HEAD Content-Length（GitHub CDN 支持 HEAD 且
+         *  无限流风险）；失败/非 2xx/无长度返回 null（大小未知）。 */
+        private suspend fun quickHeadSizeDefault(url: String): Long? =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val client =
+                        patchClient
+                            ?: OkHttpClient
+                                .Builder()
+                                .connectTimeout(4, TimeUnit.SECONDS)
+                                .readTimeout(10, TimeUnit.SECONDS)
+                                .build()
+                                .also { patchClient = it }
+                    val req =
+                        Request
+                            .Builder()
+                            .url(url)
+                            .header("User-Agent", "AppStore/1.0 (Android)")
+                            .head()
+                            .build()
+                    client.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) null else resp.body?.contentLength()?.takeIf { it > 0 }
                     }
                 }.getOrNull()
             }
