@@ -123,6 +123,11 @@ fun AppIcon(
                     contentScale = androidx.compose.ui.layout.ContentScale.Crop,
                 )
             } else {
+                me.spica27.spicamusic.store.DebugLog
+                    .w(
+                        "Icon",
+                        "图标解码失败 app=${app.id} icon=${app.icon} file=${file?.absolutePath} 存在=${file?.exists() ?: false}",
+                    )
                 Icon(
                     imageVector = Icons.Default.Android,
                     contentDescription = null,
