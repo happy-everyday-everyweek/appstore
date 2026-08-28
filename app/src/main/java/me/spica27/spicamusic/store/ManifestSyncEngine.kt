@@ -3,21 +3,26 @@ package me.spica27.spicamusic.store
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import me.spica27.spicamusic.common.entity.appstore.ManifestObjectRef
 import me.spica27.spicamusic.common.entity.appstore.ManifestV2
 import me.spica27.spicamusic.common.entity.appstore.ManifestV2Parser
+import me.spica27.spicamusic.store.gitlink.MirrorNotFound
 import me.spica27.spicamusic.store.gitlink.ObjectFetcher
 import java.io.File
+import java.io.IOException
 import java.security.MessageDigest
 
 /**
  * v2 清单驱动同步引擎（替代 v1 链式增量/字节决策）：
  *
  * 1. FETCH_MANIFEST：拉取 manifest.v2.json（raw(main)/dist → release/latest 双通道）；
- *    双通道均 404 → 对方仍是 v1 形态，返回 usedV2=false 由仓库层回退旧引擎。
+ *    双通道均 404 → 对方仍是 v1 形态，返回 usedV2=false 由仓库层回退旧引擎；
+ *    网络故障 ≠ 404 → 返回 Network 错误（不清空本地数据）。
  * 2. COMPARE：仅比较 index SHA 与图标 SHA 差集；bundle 是懒加载对象，不参与“是否有更新”判定。
- * 3. SYNC_INDEX_AND_ICONS：index SHA 变化才拉 index.v2.json；图标按 SHA 差集并发下载（≤6），
- *    校验通过写 sha256 标记（幂等续传）；清理下架图标与过期 bundle 缓存，最后原子提交 manifest 快照。
+ * 3. SYNC_INDEX_AND_ICONS：index SHA 变化才拉 index.v2.json（release 通道优先 + raw 缓存滞后退避），
+ *    校验 SHA 后原子替换；图标按 SHA 差集并发下载（≤6），校验通过写 sha256 标记（幂等续传）；
+ *    清理下架图标与过期 bundle 缓存，最后原子提交 manifest 快照。
  *
  * 与落后版本数无关：落后 1 版与落后 100 版流程完全相同（增量 = 清单对比结果，而非构建产物）。
  */
@@ -28,6 +33,9 @@ class ManifestSyncEngine(
 ) {
     companion object {
         const val ICON_CONCURRENCY = 6
+
+        /** raw 通道缓存滞后退避（§6.5：镜像 CDN 对 raw URL 缓存约 5 分钟，SHA 不符按 1s/5s/30s 重试） */
+        val RAW_CACHE_BACKOFF_MS = listOf(1_000L, 5_000L, 30_000L)
     }
 
     /** 下载进度回调（0f~1f；一次同步内多个对象下载会刷新） */
@@ -41,12 +49,19 @@ class ManifestSyncEngine(
     private val rawDistBase: String = "$rawMainBase/dist"
     private val releaseLatestBase: String = "https://github.com/$repo/releases/latest/download"
 
-    suspend fun sync(mode: SyncMode = SyncMode.Auto): SyncResult {
-        DebugLog.i("Sync", "[v2] 开始同步（${channel.name}）模式=$mode")
+    suspend fun sync(): SyncResult {
+        DebugLog.i("Sync", "[v2] 开始同步（${channel.name}）")
         onStage?.invoke("正在检查更新…")
 
         // 1. FETCH_MANIFEST
-        val manifestText = fetchManifestText()
+        val manifestText =
+            try {
+                fetchManifestText()
+            } catch (e: IOException) {
+                val msg = "manifest.v2.json 拉取失败（网络/镜像均不可达）：${e.message ?: e::class.simpleName}"
+                DebugLog.e("Sync", "[v2] $msg")
+                return networkError(msg)
+            }
         if (manifestText == null) {
             DebugLog.i("Sync", "[v2] ${channel.name} 无 manifest.v2.json（对方仍为 v1 形态），回退旧引擎")
             return SyncResult(changed = false, applied = null, usedV2 = false)
@@ -86,17 +101,18 @@ class ManifestSyncEngine(
         // 3. SYNC_INDEX_AND_ICONS
         if (indexChanged) {
             onStage?.invoke("正在同步应用列表…")
-            val indexText = fetchIndex(manifest.index.sha256)
+            val indexText =
+                try {
+                    fetchIndex(manifest.index.sha256)
+                } catch (e: IOException) {
+                    val msg = "index.v2.json 拉取失败（网络/镜像均不可达）：${e.message ?: e::class.simpleName}"
+                    DebugLog.e("Sync", "[v2] $msg")
+                    return networkError(msg)
+                }
             if (indexText == null) {
-                val msg = "index.v2.json 拉取失败（raw/release 双通道均不可达）"
+                val msg = "index.v2.json 拉取失败（raw/release 双通道均不可达或 SHA 校验不过）"
                 DebugLog.e("Sync", "[v2] $msg")
-                return SyncResult(
-                    changed = false,
-                    applied = null,
-                    error = SyncError.Network,
-                    errorMessage = msg,
-                    usedV2 = true,
-                )
+                return networkError(msg)
             }
             store.writeIndexV2(indexText)
             DebugLog.i("Sync", "[v2] index.v2.json 已更新（${indexText.length} 字节，SHA=${manifest.index.sha256.take(8)}…）")
@@ -115,39 +131,92 @@ class ManifestSyncEngine(
 
     // ---- FETCH_MANIFEST ----
 
-    /** 双通道拉取 manifest：raw 优先，404/失败回落 release；均失败返回 null（v1 回退） */
+    /** 统一 Network 错误结果（usedV2=true：v2 协议已探测到，仅网络失败） */
+    private fun networkError(msg: String): SyncResult =
+        SyncResult(
+            changed = false,
+            applied = null,
+            error = SyncError.Network,
+            errorMessage = msg,
+            usedV2 = true,
+        )
+
+    /**
+     * 双通道拉取 manifest：raw 优先，404 回落 release；release 通道 404 → 返回 null（v1 回退）。
+     * release 是协议判定权威（§4.4：releases/latest/download/manifest.v2.json 200→v2 / 404→v1）：
+     * 即使 raw 通道网络故障，只要 release 明确 404 即按 v1 处理，不误报 Network。
+     */
     private suspend fun fetchManifestText(): String? {
-        fetchBytes("$rawDistBase/manifest.v2.json", isRaw = true)?.let { return it.toString(Charsets.UTF_8) }
-        return fetchBytes("$releaseLatestBase/manifest.v2.json", isRaw = false)?.toString(Charsets.UTF_8)
+        var sawNetworkError: IOException? = null
+        for ((url, isRaw) in listOf("$rawDistBase/manifest.v2.json" to true, "$releaseLatestBase/manifest.v2.json" to false)) {
+            try {
+                fetchValidated(url, isRaw, null)?.let { return it }
+            } catch (e: MirrorNotFound) {
+                if (!isRaw) return null // release 404 → 权威判定对方为 v1 形态
+                // raw 404 → 试 release 通道
+            } catch (e: IOException) {
+                sawNetworkError = e
+            }
+        }
+        if (sawNetworkError != null) throw sawNetworkError
+        return null
     }
 
-    /** 拉取 index.v2.json 并校验 manifest 声明的 SHA；双通道，缓存滞后（SHA 不符）自动切通道 */
+    /**
+     * 拉取 index.v2.json 并校验 manifest 声明的 SHA。
+     * 列表功能经 release 通道优先（§6.5：raw CDN 缓存滞后不影响列表）；
+     * raw 通道在 SHA 缓存滞后时按 1s/5s/30s 退避重试（SHA 不符由调度器内部降级该镜像，
+     * 每次退避相当于换候选集），仍失败返回 null 由调用方转 Network 错误。
+     */
     private suspend fun fetchIndex(expectedSha: String): String? {
-        fetchBytes("$rawDistBase/index.v2.json", isRaw = true)?.let {
-            if (sha256(it) == expectedSha) return it.toString(Charsets.UTF_8)
+        try {
+            fetchValidated("$releaseLatestBase/index.v2.json", isRaw = false, expectedSha)?.let { return it }
+        } catch (e: MirrorNotFound) {
+            // 通道不可用，走 raw 兜底
         }
-        fetchBytes("$releaseLatestBase/index.v2.json", isRaw = false)?.let {
-            if (sha256(it) == expectedSha) return it.toString(Charsets.UTF_8)
+        for (backoff in RAW_CACHE_BACKOFF_MS) {
+            delay(backoff)
+            try {
+                fetchValidated("$rawDistBase/index.v2.json", isRaw = true, expectedSha)?.let { return it }
+            } catch (e: MirrorNotFound) {
+                return null // raw 404 → 无更多通道
+            } catch (e: IOException) {
+                // raw CDN 缓存滞后（SHA 不符）或网络抖动：退避重试，§6.5
+            }
         }
         return null
     }
 
-    /** 经镜像调度器下载对象到临时文件并读回字节；任一元失败返回 null */
+    /** 经镜像调度器下载对象并读回字节；404 抛 [MirrorNotFound]，网络故障抛 [IOException] */
     private suspend fun fetchBytes(
         url: String,
         isRaw: Boolean,
-    ): ByteArray? =
-        runCatching {
-            val dir = store.bundleTmpFile("probe").parentFile
-            dir?.mkdirs()
-            val tmp = File.createTempFile("v2-", ".bin", dir)
-            try {
-                fetcher.download(url, tmp, null, onProgress = { p -> onProgress?.invoke(p) }, isRaw = isRaw)
-                tmp.readBytes()
-            } finally {
-                tmp.delete()
-            }
-        }.getOrNull()
+        expectedSha: String?,
+    ): ByteArray {
+        val dir = store.bundleTmpFile("probe").parentFile
+        dir?.mkdirs()
+        val tmp = File.createTempFile("v2-", ".bin", dir)
+        try {
+            fetcher.download(url, tmp, expectedSha, onProgress = { p -> onProgress?.invoke(p) }, isRaw = isRaw)
+            return tmp.readBytes()
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    /**
+     * 下载并校验 SHA：符合预期（或无需校验）返回文本；404 抛 [MirrorNotFound]。
+     * 调度器已内置 SHA 校验并降级不合格镜像，此处防御性复检，SHA 不符返回 null（缓存滞后）。
+     */
+    private suspend fun fetchValidated(
+        url: String,
+        isRaw: Boolean,
+        expectedSha: String?,
+    ): String? {
+        val bytes = fetchBytes(url, isRaw, expectedSha)
+        if (expectedSha == null || sha256(bytes) == expectedSha) return bytes.toString(Charsets.UTF_8)
+        return null
+    }
 
     // ---- COMPARE ----
 

@@ -48,6 +48,8 @@ data class AppMeta(
     val packageName: String = "",
     val name: String = "",
     val icon: String = "",
+    /** 图标 blurhash 占位（index.v2.json 由 CI 计算，列表页加载态绘制，见规格 §4.2/§6.6） */
+    val iconBlurhash: String = "",
     val summary: String = "",
     val openSource: Boolean = false,
     val specialPermissions: List<SpecialPermission> = emptyList(),

@@ -7,6 +7,7 @@ import me.spica27.spicamusic.common.entity.appstore.ManifestIndexRef
 import me.spica27.spicamusic.common.entity.appstore.ManifestObjectRef
 import me.spica27.spicamusic.common.entity.appstore.ManifestV2
 import me.spica27.spicamusic.common.entity.appstore.ManifestV2Parser
+import me.spica27.spicamusic.store.gitlink.MirrorNotFound
 import me.spica27.spicamusic.store.gitlink.ObjectFetcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -36,6 +37,8 @@ class ManifestSyncEngineIntegrationTest {
         "https://raw.githubusercontent.com/${SyncChannel.AppIndex.repo}/main/dist/manifest.v2.json"
     private val indexRaw =
         "https://raw.githubusercontent.com/${SyncChannel.AppIndex.repo}/main/dist/index.v2.json"
+    private val indexRelease =
+        "https://github.com/${SyncChannel.AppIndex.repo}/releases/latest/download/index.v2.json"
 
     /** 字节计量的假网络层：记录每个 URL 与累计下载字节数 */
     private class MeteredObjectFetcher(
@@ -54,7 +57,8 @@ class ManifestSyncEngineIntegrationTest {
         ): File {
             downloaded += url
             if (url in failUrls) throw IOException("模拟失败:$url")
-            val data = files[url] ?: throw IOException("no asset $url")
+            // 未提供的资源视为 404（v2 协议探测 / 通道兜底依赖 MirrorNotFound）
+            val data = files[url] ?: throw MirrorNotFound(url)
             dest.parentFile?.mkdirs()
             dest.writeBytes(data)
             downloadedBytes += data.size
@@ -111,6 +115,7 @@ class ManifestSyncEngineIntegrationTest {
         buildMap {
             put(manifestRaw, manifest.toByteArray())
             put(indexRaw, indexText.toByteArray())
+            put(indexRelease, indexText.toByteArray()) // index 经 release 通道优先（§6.5）
             ids.forEach { id -> put(iconUrl(id), makeIconBytes(id)) }
         }
 

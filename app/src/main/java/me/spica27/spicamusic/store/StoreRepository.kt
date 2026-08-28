@@ -96,7 +96,7 @@ class StoreRepository(
 
     /** AppIndex 通道：v2 引擎先探测，usedV2=false（manifest.v2 404）时回退 v1 引擎 */
     private suspend fun syncAppIndex(mode: SyncMode): SyncResult {
-        val r2 = v2Engine.sync(mode)
+        val r2 = v2Engine.sync()
         if (r2.usedV2) return r2
         DebugLog.i("Sync", "[v2] AppIndex 无 manifest.v2.json，回退 v1 引擎")
         return v1Engine.sync(SyncChannel.AppIndex, mode)

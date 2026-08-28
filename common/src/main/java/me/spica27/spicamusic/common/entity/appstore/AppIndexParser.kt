@@ -54,6 +54,7 @@ object AppIndexParser {
             packageName = obj["packageName"]?.jsonPrimitive?.contentOrNull ?: "",
             name = obj["name"]?.jsonPrimitive?.contentOrNull ?: "",
             icon = obj["icon"]?.jsonPrimitive?.contentOrNull ?: "",
+            iconBlurhash = obj["iconBlurhash"]?.jsonPrimitive?.contentOrNull ?: "",
             summary = obj["summary"]?.jsonPrimitive?.contentOrNull ?: "",
             openSource =
                 obj["openSource"]?.toBooleanCompat()

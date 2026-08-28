@@ -18,8 +18,10 @@ data class MirrorStateEntry(
     val lastOkAt: Long = 0,
     val fails: Int = 0,
     val ewmaBps: Long = 0,
-    /** 是否成功下载过 raw.githubusercontent.com 直链（raw 通道仅路由到 rawOk 镜像） */
+    /** 是否成功下载过 raw.githubusercontent.com 直链（raw 通道仅路由到 rawOk 镜像，§6.5） */
     val rawOk: Boolean = false,
+    /** 是否成功下载过 GitHub release 直链（与 rawOk 分别记录两通道可达性，§6.5） */
+    val releaseOk: Boolean = false,
 )
 
 @Serializable

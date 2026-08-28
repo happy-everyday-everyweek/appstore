@@ -21,7 +21,7 @@ import java.util.zip.ZipInputStream
  * URL 解析规则（§5.1：bundle 实体按 tag 寻址，历史 URL 永久有效）：
  * - 完整 URL（http…）直接用；
  * - 相对当前 Release（bundles/…）→ <releaseTag>/<url>；
- * - 携带 tag（dist-…）→ <url>/bundles/<id>.bundle.zip；
+ * - 携带 tag（dist-…）→ <url>（已是 tag 限定完整相对路径，§5.1）；
  * - 其余兜底 → <releaseTag>/bundles/<id>.bundle.zip。
  */
 class BundleLoader(
@@ -111,7 +111,7 @@ class BundleLoader(
         return when {
             u.startsWith("http") -> u
             u.startsWith("bundles/") -> "$base/${manifestReleaseTag()}/$u"
-            u.startsWith("dist-") -> "$base/$u/bundles/${ref.id}.bundle.zip"
+            u.startsWith("dist-") -> "$base/$u"
             else -> "$base/${manifestReleaseTag()}/bundles/${ref.id}.bundle.zip"
         }
     }
