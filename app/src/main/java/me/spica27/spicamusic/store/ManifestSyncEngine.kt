@@ -75,6 +75,10 @@ class ManifestSyncEngine(
         val indexChanged = snapshot?.index?.sha256 != manifest.index.sha256 || store.readIndexV2() == null
         val missingIcons = manifest.icons.filterNot { isIconCurrent(it) }
         if (!indexChanged && missingIcons.isEmpty()) {
+            // 无资产变化：仍将快照推进到最新 manifest（manifest 是唯一版本真相，tag 可能已更新）
+            if (snapshot?.releaseTag != manifest.releaseTag) {
+                store.writeManifestSnapshot(manifestText)
+            }
             DebugLog.i("Sync", "[v2] ${channel.name} 无更新（index 一致、图标齐全）")
             return SyncResult(changed = false, applied = PackageKind.None, usedV2 = true)
         }
