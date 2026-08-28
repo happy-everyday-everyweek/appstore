@@ -11,9 +11,13 @@ import me.spica27.spicamusic.common.entity.appstore.DiscoverIndexParser
 /**
  * 商店数据仓库：缓存加载 + 双通道同步触发，向 UI 暴露 StateFlow。
  * 全部页/搜索页/详情页消费 apps；推荐页消费 cards。
+ *
+ * v2（§6.5 协议探测）：AppIndex 通道先探测 manifest.v2.json（v2 引擎），
+ * 探测到 404（对方仍为 v1 形态）→ 自动回退 v1 引擎；Discover 通道体积极小，维持 v1。
  */
 class StoreRepository(
-    private val engine: SyncEngine,
+    private val v1Engine: SyncEngine,
+    private val v2Engine: ManifestSyncEngine,
     private val store: SyncStore,
 ) {
     data class SyncVersions(
@@ -78,14 +82,24 @@ class StoreRepository(
     }
 
     private suspend fun refreshInternal() {
-        engine.onProgress = { _downloadProgress.value = it }
-        engine.onStage = { _syncStage.value = it }
+        v1Engine.onProgress = { _downloadProgress.value = it }
+        v1Engine.onStage = { _syncStage.value = it }
+        v2Engine.onProgress = { _downloadProgress.value = it }
+        v2Engine.onStage = { _syncStage.value = it }
         DebugLog.i("Sync", "开始静默增量同步（${SyncChannel.AppIndex.repo} / ${SyncChannel.Discover.repo}）")
-        val r1 = engine.sync(SyncChannel.AppIndex, SyncMode.Auto)
-        val r2 = engine.sync(SyncChannel.Discover, SyncMode.Auto)
+        val r1 = syncAppIndex(SyncMode.Auto)
+        val r2 = v1Engine.sync(SyncChannel.Discover, SyncMode.Auto)
         _lastError.value = syncErrorOf(r1) ?: syncErrorOf(r2)
         _syncStage.value = null
         if (_lastError.value == null) DebugLog.i("Sync", "双通道同步完成")
+    }
+
+    /** AppIndex 通道：v2 引擎先探测，usedV2=false（manifest.v2 404）时回退 v1 引擎 */
+    private suspend fun syncAppIndex(mode: SyncMode): SyncResult {
+        val r2 = v2Engine.sync(mode)
+        if (r2.usedV2) return r2
+        DebugLog.i("Sync", "[v2] AppIndex 无 manifest.v2.json，回退 v1 引擎")
+        return v1Engine.sync(SyncChannel.AppIndex, mode)
     }
 
     /** 首次使用/损坏兜底：前台全量 */
@@ -101,10 +115,12 @@ class StoreRepository(
     }
 
     private suspend fun forceFullInternal() {
-        engine.onProgress = { _downloadProgress.value = it }
-        engine.onStage = { _syncStage.value = it }
-        val r1 = engine.sync(SyncChannel.AppIndex, SyncMode.Full)
-        val r2 = engine.sync(SyncChannel.Discover, SyncMode.Full)
+        v1Engine.onProgress = { _downloadProgress.value = it }
+        v1Engine.onStage = { _syncStage.value = it }
+        v2Engine.onProgress = { _downloadProgress.value = it }
+        v2Engine.onStage = { _syncStage.value = it }
+        val r1 = syncAppIndex(SyncMode.Full)
+        val r2 = v1Engine.sync(SyncChannel.Discover, SyncMode.Full)
         _lastError.value = syncErrorOf(r1) ?: syncErrorOf(r2)
         _syncStage.value = null
     }
@@ -123,9 +139,17 @@ class StoreRepository(
     }
 
     fun reloadFromCache() {
-        store.readCachedText(SyncChannel.AppIndex)?.let {
-            runCatching { _apps.value = AppIndexParser.parse(it) }
-                .onFailure { e -> DebugLog.e("Sync", "AppIndex 缓存解析失败: ${e.message} 内容=${it.take(120)}") }
+        // v2 优先：index.v2.json 存在即用之（含图标 id → assets/icons/<id>.png 重写）；
+        // 否则回落 v1 聚合包缓存 app-index.json（双轨期兼容）
+        val v2Index = store.readIndexV2()
+        if (v2Index != null) {
+            runCatching { _apps.value = AppIndexParser.parseV2(v2Index) }
+                .onFailure { e -> DebugLog.e("Sync", "index.v2.json 缓存解析失败: ${e.message} 内容=${v2Index.take(120)}") }
+        } else {
+            store.readCachedText(SyncChannel.AppIndex)?.let {
+                runCatching { _apps.value = AppIndexParser.parse(it) }
+                    .onFailure { e -> DebugLog.e("Sync", "AppIndex 缓存解析失败: ${e.message} 内容=${it.take(120)}") }
+            }
         }
         store.readCachedText(SyncChannel.Discover)?.let {
             runCatching { _cards.value = DiscoverIndexParser.parse(it) }

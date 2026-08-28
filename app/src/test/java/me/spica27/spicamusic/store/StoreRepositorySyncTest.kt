@@ -1,6 +1,7 @@
 package me.spica27.spicamusic.store
 
 import kotlinx.coroutines.test.runTest
+import me.spica27.spicamusic.store.gitlink.ObjectFetcher
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -40,6 +41,22 @@ class StoreRepositorySyncTest {
         }
     }
 
+    /** v2 探测期 Fake：manifest.v2.json 全部 404 → 引擎返回 usedV2=false，触发 v1 回退 */
+    private class FakeV2Fetcher : ObjectFetcher {
+        override suspend fun download(
+            url: String,
+            dest: File,
+            expectedSha256: String?,
+            onProgress: (Float) -> Unit,
+            isRaw: Boolean,
+        ): File = throw java.io.IOException("v2 未启用（404）:$url")
+    }
+
+    private fun repository(
+        v1: SyncEngine,
+        store: SyncStore,
+    ): StoreRepository = StoreRepository(v1, ManifestSyncEngine(FakeV2Fetcher(), store), store)
+
     private fun zipOf(vararg entries: Pair<String, String>): ByteArray {
         val bos = ByteArrayOutputStream()
         ZipOutputStream(bos).use { zos ->
@@ -73,7 +90,7 @@ class StoreRepositorySyncTest {
             val patches = allOkPatches()
             val downloader =
                 FakeDownloader(patches, failUrls = setOf(baseUrl(SyncChannel.AppIndex) + "/patch.json"))
-            val repo = StoreRepository(SyncEngine(downloader, store), store)
+            val repo = repository(SyncEngine(downloader, store), store)
             repo.bootstrap()
             val err = repo.lastError.value
             assertNotNull("失败后必须记录错误", err)
@@ -85,12 +102,12 @@ class StoreRepositorySyncTest {
         runTest {
             val store = SyncStore(tmp.newFolder())
             val failUrl = baseUrl(SyncChannel.AppIndex) + "/patch.json"
-            val repo = StoreRepository(SyncEngine(FakeDownloader(allOkPatches(), failUrls = setOf(failUrl)), store), store)
+            val repo = repository(SyncEngine(FakeDownloader(allOkPatches(), failUrls = setOf(failUrl)), store), store)
             repo.bootstrap()
             assertNotNull("先制造一次失败", repo.lastError.value)
 
             val store2 = SyncStore(tmp.newFolder())
-            val repo2 = StoreRepository(SyncEngine(FakeDownloader(allOkPatches()), store2), store2)
+            val repo2 = repository(SyncEngine(FakeDownloader(allOkPatches()), store2), store2)
             repo2.bootstrap()
             val cached = store2.readCachedText(SyncChannel.AppIndex)
             if (cached == null) {

@@ -2,6 +2,7 @@ package me.spica27.spicamusic.ui.detail
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,6 +85,12 @@ fun DetailScreen(app: AppMeta) {
     val context = LocalContext.current
     val viewModel: StoreViewModel = koinActivityViewModel()
 
+    // 详情包懒加载（v2）：进入详情页即触发；display = 合并 bundle 详情后的完整元数据
+    val bundleUi by viewModel.bundleUi.collectAsStateWithLifecycle()
+    val bundle = bundleUi?.takeIf { it.appId == app.id }
+    val display = bundle?.meta ?: app
+    LaunchedEffect(app.id) { viewModel.loadBundle(app) }
+
     // 下载结果提示（一次性消费）
     val lastDownload by viewModel.lastDownload.collectAsStateWithLifecycle()
     LaunchedEffect(lastDownload) {
@@ -92,8 +99,8 @@ fun DetailScreen(app: AppMeta) {
             viewModel.consumeDownloadMessage { }
         }
     }
-    // 上游应用（upstream 指向的系统 ID 解析）
-    val upstreamApp = app.upstreamId?.let { viewModel.appById(it) }
+    // 上游应用（upstream 指向的系统 ID 解析；v2 时 upstream 在 bundle 详情中）
+    val upstreamApp = display.upstreamId?.let { viewModel.appById(it) }
 
     // 全面屏适配：全屏详情页背景铺满含状态栏（图标模糊打底），顶部渐变遮罩压平状态栏色差
     Box(
@@ -216,7 +223,7 @@ fun DetailScreen(app: AppMeta) {
             if (app.repo.isNotBlank()) {
                 Text(
                     text =
-                        "${app.repo} · ${app.license ?: "无 License"}" +
+                        "${app.repo} · ${display.license ?: "无 License"}" +
                             if (app.version.releaseTag.isNotBlank()) " · ${app.version.releaseTag}" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.7f),
@@ -224,7 +231,7 @@ fun DetailScreen(app: AppMeta) {
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp),
                 )
             }
-            if (app.packageName.isNotBlank() || app.apkSha256.isNotBlank()) {
+            if (app.packageName.isNotBlank() || display.apkSha256.isNotBlank()) {
                 Column(
                     modifier =
                         Modifier
@@ -240,20 +247,20 @@ fun DetailScreen(app: AppMeta) {
                             textAlign = TextAlign.Center,
                         )
                     }
-                    if (app.apkSha256.isNotBlank()) {
+                    if (display.apkSha256.isNotBlank()) {
                         Text(
-                            text = "APK SHA-256：${app.apkSha256.take(16)}…",
+                            text = "APK SHA-256：${display.apkSha256.take(16)}…",
                             style = MaterialTheme.typography.bodySmall,
                             color = Color.White.copy(alpha = 0.6f),
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-                    if (app.apkUrl.isNotBlank()) {
+                    if (display.apkUrl.isNotBlank()) {
                         androidx.compose.foundation.text.ClickableText(
                             text =
                                 androidx.compose.ui.text.buildAnnotatedString {
-                                    append("APK 来源直链：${app.apkUrl}")
+                                    append("APK 来源直链：${display.apkUrl}")
                                     addStyle(
                                         androidx.compose.ui.text.SpanStyle(
                                             color = Color.White.copy(alpha = 0.85f),
@@ -270,7 +277,7 @@ fun DetailScreen(app: AppMeta) {
                                     context.startActivity(
                                         android.content.Intent(
                                             android.content.Intent.ACTION_VIEW,
-                                            android.net.Uri.parse(app.apkUrl),
+                                            android.net.Uri.parse(display.apkUrl),
                                         ),
                                     )
                                 }
@@ -318,21 +325,41 @@ fun DetailScreen(app: AppMeta) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 介绍（README）：优先读随包资产 assets/readmes/<id>.md（Markdown 轻渲染）
+            // 介绍（README）：v1 读随包资产 assets/readmes/<id>.md；v2 读解包的 bundle README
             SectionCard(title = stringResource(R.string.detail_readme)) {
                 val readmeText =
-                    remember(app.readme) {
-                        if (app.readme.isBlank()) {
+                    remember(display.readme, bundle?.meta) {
+                        if (display.readme.isBlank()) {
                             null
                         } else {
                             me.spica27.spicamusic.store.StoreAssets
-                                .file(app.readme.removePrefix("assets/"))
+                                .file(display.readme.removePrefix("assets/"))
                                 ?.readText()
                         }
                     }
                 if (readmeText != null) {
                     me.spica27.spicamusic.ui.components
                         .MarkdownContent(md = readmeText)
+                } else if (bundle?.loading == true) {
+                    Text(
+                        text = "正在加载应用详情（${((bundle.progress * 100).toInt())}%）…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else if (bundle?.error != null) {
+                    Text(
+                        text = bundle.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    me.spica27.spicamusic.ui.components.TagChip(
+                        text = "重试加载",
+                        background = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier =
+                            Modifier.clickable { viewModel.retryBundle(app) },
+                    )
                 } else {
                     Text(
                         text =
@@ -346,7 +373,7 @@ fun DetailScreen(app: AppMeta) {
                 }
             }
 
-            // 权限区：最低特殊权限标签 + APK 解包提取的完整权限清单
+            // 权限区：最低特殊权限标签 + bundle 详情中的完整权限清单
             SectionCard(title = stringResource(R.string.detail_permissions)) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (app.specialPermissions.isEmpty()) {
@@ -364,20 +391,26 @@ fun DetailScreen(app: AppMeta) {
                             )
                         }
                     }
-                    if (app.permissions.isNotEmpty()) {
+                    if (display.permissions.isNotEmpty()) {
                         Text(
                             text = "完整权限清单：",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),
                         )
-                        app.permissions.forEach { permission ->
+                        display.permissions.forEach { permission ->
                             Text(
                                 text = "• $permission",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    } else if (bundle?.loading == true) {
+                        Text(
+                            text = "正在加载完整权限清单…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -390,11 +423,11 @@ fun DetailScreen(app: AppMeta) {
         val downloading by viewModel.downloading.collectAsStateWithLifecycle()
         val lastDownloadedApk by viewModel.lastDownloadedApk.collectAsStateWithLifecycle()
         DownloadBar(
-            app = app,
+            app = display,
             task = task,
             downloading = downloading,
             lastDownloadedApk = lastDownloadedApk,
-            onDownload = { viewModel.downloadApk(context, app) },
+            onDownload = { viewModel.downloadApk(context, display) },
             onReinstall = { viewModel.reinstallLastDownload(context) },
             modifier =
                 Modifier
