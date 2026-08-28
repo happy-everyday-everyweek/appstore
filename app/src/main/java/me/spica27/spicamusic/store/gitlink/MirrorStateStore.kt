@@ -49,7 +49,14 @@ class MirrorStateStore(
     fun save(snapshot: MirrorStateSnapshot) {
         runCatching {
             file.parentFile?.mkdirs()
-            file.writeText(json.encodeToString(snapshot))
+            // 原子替换：先写临时文件再 rename，避免并发写/中断留下半截 JSON
+            // （load() 解析失败会静默回落空快照，导致下一会话重探全部镜像）
+            val tmp = File(file.parentFile, "${file.name}.tmp")
+            tmp.writeText(json.encodeToString(snapshot))
+            if (!tmp.renameTo(file)) {
+                file.writeText(tmp.readText())
+                tmp.delete()
+            }
         }
     }
 }

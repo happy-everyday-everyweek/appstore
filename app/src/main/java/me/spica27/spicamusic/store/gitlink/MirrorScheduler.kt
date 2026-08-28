@@ -7,6 +7,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import me.spica27.spicamusic.store.DebugLog
@@ -69,6 +71,9 @@ class MirrorScheduler(
     /** 会话内缓存的状态快照（含持久化结果） */
     @Volatile
     private var sessionState: MirrorStateSnapshot? = null
+
+    /** 串行化 sessionState 的读-改-写：@Volatile 只保证可见性，多路并发下载同时更新会互相覆盖 */
+    private val stateMutex = Mutex()
 
     /** 阶段回调用（供 UI 展示具体流程） */
     var onStage: ((String) -> Unit)? = null
@@ -207,8 +212,10 @@ class MirrorScheduler(
                             ),
                 )
         }
-        sessionState = updated
-        stateStore.save(updated)
+        stateMutex.withLock {
+            sessionState = updated
+            stateStore.save(updated)
+        }
         return orderCandidates(updated, isRaw)
     }
 
@@ -498,43 +505,47 @@ class MirrorScheduler(
             }
         }
 
-    private fun recordSuccess(
+    private suspend fun recordSuccess(
         mirror: Mirror,
         isRaw: Boolean,
         startedAt: Long,
         bytes: Long,
     ) {
-        val st = sessionState ?: return
-        val prev = st.mirrors[mirror.id] ?: MirrorStateEntry()
         val now = System.currentTimeMillis()
         val elapsedMs = (now - startedAt).coerceAtLeast(1)
         val bps = bytes * 1000 / elapsedMs
-        val ewma = if (prev.ewmaBps > 0) (prev.ewmaBps * 7 + bps) / 8 else bps
-        val updated =
-            st.copy(
-                mirrors =
-                    st.mirrors +
-                        (
-                            mirror.id to
-                                prev.copy(
-                                    lastOkAt = now,
-                                    fails = 0,
-                                    ewmaBps = ewma,
-                                    rawOk = prev.rawOk || isRaw,
-                                    releaseOk = prev.releaseOk || !isRaw,
-                                )
-                        ),
-            )
-        sessionState = updated
-        stateStore.save(updated)
+        stateMutex.withLock {
+            val st = sessionState ?: return@withLock
+            val prev = st.mirrors[mirror.id] ?: MirrorStateEntry()
+            val ewma = if (prev.ewmaBps > 0) (prev.ewmaBps * 7 + bps) / 8 else bps
+            val updated =
+                st.copy(
+                    mirrors =
+                        st.mirrors +
+                            (
+                                mirror.id to
+                                    prev.copy(
+                                        lastOkAt = now,
+                                        fails = 0,
+                                        ewmaBps = ewma,
+                                        rawOk = prev.rawOk || isRaw,
+                                        releaseOk = prev.releaseOk || !isRaw,
+                                    )
+                            ),
+                )
+            sessionState = updated
+            stateStore.save(updated)
+        }
     }
 
-    private fun recordFail(mirror: Mirror) {
-        val st = sessionState ?: return
-        val prev = st.mirrors[mirror.id] ?: MirrorStateEntry()
-        val updated = st.copy(mirrors = st.mirrors + (mirror.id to prev.copy(fails = prev.fails + 1)))
-        sessionState = updated
-        stateStore.save(updated)
+    private suspend fun recordFail(mirror: Mirror) {
+        stateMutex.withLock {
+            val st = sessionState ?: return@withLock
+            val prev = st.mirrors[mirror.id] ?: MirrorStateEntry()
+            val updated = st.copy(mirrors = st.mirrors + (mirror.id to prev.copy(fails = prev.fails + 1)))
+            sessionState = updated
+            stateStore.save(updated)
+        }
     }
 
     private fun sha256(file: File): String {

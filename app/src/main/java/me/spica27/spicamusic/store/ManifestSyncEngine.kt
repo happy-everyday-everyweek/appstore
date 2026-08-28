@@ -95,6 +95,7 @@ class ManifestSyncEngine(
             if (snapshot?.releaseTag != manifest.releaseTag) {
                 store.writeManifestSnapshot(manifestText)
             }
+            store.writeVersion(channel, manifest.releaseTag)
             DebugLog.i("Sync", "[v2] ${channel.name} 无更新（index 一致、图标齐全）")
             return SyncResult(changed = false, applied = PackageKind.None, usedV2 = true)
         }
@@ -136,6 +137,7 @@ class ManifestSyncEngine(
 
         // 4. 原子提交快照（对比基准 = 本次成功同步的清单）
         store.writeManifestSnapshot(manifestText)
+        store.writeVersion(channel, manifest.releaseTag)
         return SyncResult(changed = true, applied = PackageKind.Manifest, usedV2 = true)
     }
 
@@ -182,7 +184,10 @@ class ManifestSyncEngine(
         try {
             fetchValidated("$releaseLatestBase/index.v2.json", isRaw = false, expectedSha)?.let { return it }
         } catch (e: MirrorNotFound) {
-            // 通道不可用，走 raw 兜底
+            // release 通道无此资产，走 raw 兜底
+        } catch (e: IOException) {
+            // release 通道网络故障（镜像拒绝/超时/HTML 挑战页），同样走 raw 兜底（§6.5），
+            // 而非直接冒泡成 Network 错误
         }
         return fetchRawWithBackoff("$rawDistBase/index.v2.json", expectedSha)?.toString(Charsets.UTF_8)
     }
