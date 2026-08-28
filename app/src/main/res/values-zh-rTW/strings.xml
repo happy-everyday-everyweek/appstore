@@ -628,10 +628,10 @@
   <string name="settings_about">關於</string>
   <string name="settings_about_subtitle">版本、開源聲明與隱私</string>
   <string name="about_title">關於</string>
-  <string name="about_app_tagline">基於 Jetpack Compose 與 Media3 打造的現代化本地音樂播放器</string>
+  <string name="about_app_tagline">以 GitHub 為唯一分發源的開源 Android 應用市場</string>
   <string name="about_version_format">版本 %1$s</string>
   <string name="about_section_intro">專案簡介</string>
-  <string name="about_intro_body">檸檬音樂是一款基於 Media3 ExoPlayer、Jetpack Compose 與 Koin 打造的現代化 Android 音樂播放器。它在本機播放你的音訊，支援 FLAC、ALAC、Opus 等多種高品質格式，並提供歌詞、等化器、頻譜視覺化、播放清單與聆聽統計等能力。所有功能均在裝置本機執行，無需帳號。</string>
+  <string name="about_intro_body">Only 是一個以 GitHub 為唯一分發源的開源 Android 應用市場。應用收錄、元資料採集、評級與分發全部由 GitHub 工作流自動完成；APK 始終來自開發者自己的 Release，來源可追溯。</string>
   <string name="about_section_more">更多</string>
   <string name="about_open_source">開源授權</string>
   <string name="about_open_source_subtitle">本應用使用的第三方函式庫</string>
@@ -655,7 +655,7 @@
   <string name="privacy_title">隱私政策</string>
   <string name="privacy_updated_format">最後更新：%1$s</string>
   <string name="privacy_updated_value">2026 年 6 月</string>
-  <string name="privacy_intro">檸檬音樂尊重你的隱私。本應用被設計為完全在你的裝置上執行。本政策說明應用會存取哪些資料以及如何使用。</string>
+  <string name="privacy_intro">Only 尊重你的隱私。本應用被設計為完全在你的裝置上執行。本政策說明應用會存取哪些資料以及如何使用。</string>
   <string name="privacy_section_data_title">我們存取的資料</string>
   <string name="privacy_section_data_body">• 你裝置上的音訊檔案與媒體中繼資料，僅用於在本機掃描和播放你的音樂庫。\n• 播放紀錄、收藏、播放清單與設定，僅儲存在應用本機資料庫與偏好設定中。\n本應用無需帳號，也不收集個人身分識別。</string>
   <string name="privacy_section_network_title">網路使用</string>
