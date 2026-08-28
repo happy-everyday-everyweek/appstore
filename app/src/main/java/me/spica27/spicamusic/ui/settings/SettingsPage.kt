@@ -44,7 +44,7 @@ import me.spica27.spicamusic.ui.home.StoreViewModel
 import org.koin.compose.viewmodel.koinActivityViewModel
 
 /**
- * 应用市场设置页：数据同步状态、检查更新、关于（版本/仓库/开源声明）。
+ * Only 设置页：数据同步状态、检查更新、关于（版本/仓库/开源声明）。
  */
 @Composable
 fun SettingsPage() {
@@ -320,7 +320,7 @@ fun SettingsPage() {
         }
 
         Text(
-            text = "应用市场是一个以 GitHub 为唯一分发源的开源 Android 应用市场。应用收录、元数据采集、评级与分发全部由 GitHub 工作流自动完成；APK 始终来自开发者自己的 Release，来源可追溯。",
+            text = "Only 是一个以 GitHub 为唯一分发源的开源 Android 应用市场。应用收录、元数据采集、评级与分发全部由 GitHub 工作流自动完成；APK 始终来自开发者自己的 Release，来源可追溯。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp),

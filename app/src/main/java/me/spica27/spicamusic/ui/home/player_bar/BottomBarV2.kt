@@ -136,10 +136,10 @@ fun BottomBarV2(
     val showFullPlayer by remember(state) { derivedStateOf { state.fraction.value > 0.001f } }
     // 完全展开后移除迷你内容，避免无谓测量与手势拦截
     val showMiniContent by remember(state) { derivedStateOf { state.fraction.value < 0.999f } }
-    // 应用市场版：导航常驻置顶，全屏卡片恒在导航之下
+    // Only 版：导航常驻置顶，全屏卡片恒在导航之下
     val fullOnTop = false
 
-    // 应用市场版：无收起态。展开时不再拦截返回键（原版 BackHandler 移除）
+    // Only 版：无收起态。展开时不再拦截返回键（原版 BackHandler 移除）
     // BackHandler(enabled = state.isExpanded) { state.collapse() }
 
     Layout(

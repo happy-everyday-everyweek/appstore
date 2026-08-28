@@ -626,7 +626,7 @@
   <string name="nav_tab_settings">设置</string>
 
   <!-- Store -->
-  <string name="app_name">应用市场</string>
+  <string name="app_name">Only</string>
   <string name="store_search_hint">搜索应用</string>
   <string name="discover_coming_soon">推荐页建设中</string>
   <string name="empty_library">暂无应用</string>

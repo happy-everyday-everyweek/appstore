@@ -1,17 +1,17 @@
 <div align="center">
 
-# 🍋 柠檬音乐 (SPICa Music)
+# Only
 
-**现代化 Android 音乐播放器 | Jetpack Compose + Media3 + Koin + navkit**
+**GitHub 驱动的开源 Android 应用市场 | Jetpack Compose + Media3 + Koin + navkit**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Android](https://img.shields.io/badge/Android-29+-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.3+-purple.svg)](https://kotlinlang.org)
-[![GitHub release](https://img.shields.io/github/v/release/yangSpica27/SPICaMusic_Android?include_prereleases)](https://github.com/yangSpica27/SPICaMusic_Android/releases)
+[![GitHub release](https://img.shields.io/github/v/release/happy-everyday-everyweek/appstore?include_prereleases)](https://github.com/happy-everyday-everyweek/appstore/releases)
 
-[下载最新版](https://github.com/yangSpica27/SPICaMusic_Android/releases) ·
-[查看源码](https://github.com/yangSpica27/SPICaMusic_Android) ·
-[反馈问题](https://github.com/yangSpica27/SPICaMusic_Android/issues)
+[下载最新版](https://github.com/happy-everyday-everyweek/appstore/releases) ·
+[查看源码](https://github.com/happy-everyday-everyweek/appstore) ·
+[反馈问题](https://github.com/happy-everyday-everyweek/appstore/issues)
 
 </div>
 
@@ -37,7 +37,7 @@
 
 ## 📖 项目简介
 
-柠檬音乐是一款面向本地音乐播放的现代化 Android 应用，基于 **Media3 ExoPlayer**、**Jetpack Compose** 与 **Koin** 构建，支持 Android 10 及以上系统。
+Only 是 GitHub 驱动的开源 Android 应用市场客户端，代码 fork 自柠檬音乐（SPICa Music）并复用其 Media3 播放能力与多模块架构。应用市场相关的权威规格以 docs/SPEC.md、docs/DESIGN.md 为准；本 README 以下章节仍描述其上游音乐播放器：基于 **Media3 ExoPlayer**、**Jetpack Compose** 与 **Koin** 构建，支持 Android 10 及以上系统。
 
 应用可扫描设备中的音乐文件，并提供收藏、歌单、播放历史、在线歌词、均衡器、混响和实时频谱等功能。项目采用**分层 + 多模块**架构：`app` 负责 Compose UI、应用级 DI 与后台播放服务；`feature-*-domain` 暴露 use case / facade；`feature-*-data` 提供数据实现；`common` 与 `core-preferences` 提供跨模块共享能力。
 
@@ -87,16 +87,16 @@
 
 ### 安装
 
-从 [Releases](https://github.com/yangSpica27/SPICaMusic_Android/releases) 下载最新 APK 并安装。目前 APK 仅提供 `arm64-v8a` 架构，设备需运行 Android 10（API 29）或更高版本。
+从 [Releases](https://github.com/happy-everyday-everyweek/appstore/releases) 下载最新 APK 并安装。目前 APK 仅提供 `arm64-v8a` 架构，设备需运行 Android 10（API 29）或更高版本。
 
 ### 从源码构建
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/yangSpica27/SPICaMusic_Android.git
+git clone https://github.com/happy-everyday-everyweek/appstore.git
 
 # 2. 进入项目并执行调试构建（Windows）
-cd SPICaMusic_Android
+cd appstore
 .\gradlew.bat :app:assembleDebug
 ```
 

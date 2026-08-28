@@ -22,7 +22,7 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "AppStore"
+rootProject.name = "Only"
 include ':app'
 include ':common'
 include ':core-preferences'

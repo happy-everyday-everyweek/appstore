@@ -64,7 +64,7 @@ import me.spica27.spicamusic.ui.search.SearchScene
 import org.koin.compose.viewmodel.koinActivityViewModel
 
 /**
- * 底部媒体控制栏（V2 · 应用市场版）
+ * 底部媒体控制栏（V2 · Only 版）
  *
  * 基于上游生产版 BottomMediaBarV2 修改：
  * - 移除音频播放控制条（playBar 槽置空）
