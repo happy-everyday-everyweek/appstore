@@ -1,5 +1,7 @@
 package me.spica27.spicamusic.ui.search
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -12,6 +14,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +55,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -58,13 +63,17 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import me.spica27.navkit.path.LocalNavigationPath
 import me.spica27.navkit.scene.StackScene
 import me.spica27.spicamusic.R
 import me.spica27.spicamusic.common.entity.appstore.AppMeta
+import me.spica27.spicamusic.store.UnlistedApp
+import me.spica27.spicamusic.store.UnlistedSearchSource
 import me.spica27.spicamusic.ui.components.AppRow
 import me.spica27.spicamusic.ui.detail.DetailScene
 import me.spica27.spicamusic.ui.home.StoreViewModel
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinActivityViewModel
 
 /**
@@ -107,6 +116,24 @@ class SearchScene : StackScene() {
                 }
             }
 
+        // 未收录应用搜索：本地无匹配结果时，去抖后查 GitHub（排除已收录仓库）
+        val unlistedSource: UnlistedSearchSource = koinInject()
+        var unlisted by remember { mutableStateOf<List<UnlistedApp>>(emptyList()) }
+        var unlistedLoading by remember { mutableStateOf(false) }
+        val noLocal = results.isEmpty() && keyword.isNotBlank()
+        LaunchedEffect(keyword, noLocal) {
+            if (!noLocal) {
+                unlisted = emptyList()
+                unlistedLoading = false
+                return@LaunchedEffect
+            }
+            delay(600) // 去抖：避免输入过程频繁请求，打爆 GitHub Search 未认证限额
+            unlistedLoading = true
+            val exclude = apps.values.map { it.repo }.toSet()
+            unlisted = unlistedSource.search(keyword.trim(), exclude)
+            unlistedLoading = false
+        }
+
         // 全面屏适配：全屏搜索页避开状态栏与系统导航条；实色背景避免转场露出黑边
         Column(
             modifier =
@@ -145,7 +172,12 @@ class SearchScene : StackScene() {
             ) { s ->
                 when (s) {
                     SearchState.Idle -> SearchIdleHint()
-                    SearchState.NoResult -> SearchNoResultHint()
+                    SearchState.NoResult ->
+                        if (unlisted.isNotEmpty()) {
+                            UnlistedResultList(unlisted)
+                        } else {
+                            SearchNoResultHint()
+                        }
                     SearchState.Result ->
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(results, key = { it.id }) { app ->
@@ -354,5 +386,84 @@ private fun SearchNoResultHint() {
                 )
             }
         }
+    }
+}
+
+/**
+ * 未收录应用结果列表（本地无匹配时展示，来自 GitHub Search）。
+ * 每项点击跳转该仓库 GitHub 页面；星标数与语言作为轻量可用性信号
+ * （完整收录核验见承载仓库 verify_scan 工作流）。
+ */
+@Composable
+private fun UnlistedResultList(items: List<UnlistedApp>) {
+    val context = LocalContext.current
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        item {
+            Text(
+                text = "以下仓库尚未收录，结果来自 GitHub 搜索",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+        }
+        items(items, key = { it.fullName }) { app ->
+            UnlistedRow(
+                app = app,
+                onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.htmlUrl)))
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnlistedRow(
+    app: UnlistedApp,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = app.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (app.description.isNotBlank()) {
+                Text(
+                    text = app.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                )
+            }
+            Text(
+                text = app.fullName + (app.language?.let { " · $it" } ?: ""),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+        }
+        Spacer(modifier = Modifier.size(8.dp))
+        Icon(
+            imageVector = Icons.Filled.Star,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(modifier = Modifier.size(4.dp))
+        Text(
+            text = app.stars.toString(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

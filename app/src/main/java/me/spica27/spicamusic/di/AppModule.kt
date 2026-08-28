@@ -4,12 +4,14 @@ import me.spica27.spicamusic.BuildConfig
 import me.spica27.spicamusic.core.preferences.PreferencesManager
 import me.spica27.spicamusic.store.BundleLoader
 import me.spica27.spicamusic.store.Downloader
+import me.spica27.spicamusic.store.GitHubUnlistedSearchSource
 import me.spica27.spicamusic.store.ManifestSyncEngine
 import me.spica27.spicamusic.store.SelfUpdater
 import me.spica27.spicamusic.store.SelfUpdaterImpl
 import me.spica27.spicamusic.store.StoreRepository
 import me.spica27.spicamusic.store.SyncEngine
 import me.spica27.spicamusic.store.SyncStore
+import me.spica27.spicamusic.store.UnlistedSearchSource
 import me.spica27.spicamusic.store.gitlink.GitLinkDownloader
 import me.spica27.spicamusic.store.gitlink.MirrorScheduler
 import me.spica27.spicamusic.store.gitlink.MirrorStateStore
@@ -54,6 +56,9 @@ object AppModule {
 
             // 详情包懒加载（bundle 下载 + 解包 + detail 合并）
             single<BundleLoader> { BundleLoader(get(), get()) }
+
+            // 未收录应用搜索（GitHub Search API；零 API 设计的唯一例外，按需触发）
+            single<UnlistedSearchSource> { GitHubUnlistedSearchSource(OkHttpClient()) }
 
             // 客户端自身更新（独立于商店收录；GitLink 直链 patch.json 判定版本）
             single<SelfUpdater> {
