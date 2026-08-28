@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.spica27.spicamusic.common.utils.LrcParserTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-08-28T03:09:51.857Z" hostname="all-in-one-64-m9xng" time="0.078">
+  <properties/>
+  <testcase name="parse_clampsEndTimeWhenWordTimelinePrecedesLineTag" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.015"/>
+  <testcase name="parse_pairsTranslationWithEnhancedLrcLine" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.003"/>
+  <testcase name="parse_degradesToNormalLyricWhenWordTimingIsBroken" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.007"/>
+  <testcase name="parse_normalLineWithoutTranslationHasNullTranslation" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.001"/>
+  <testcase name="parse_pairsTranslationWithPlainLrcLine" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.0"/>
+  <testcase name="parse_usesLineTagTimeWhenWordTimingSlightlyDeviates" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.004"/>
+  <testcase name="parse_keepsWordTimingForVocalLeadIn" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.001"/>
+  <testcase name="parse_enhancedLineWithoutTranslationKeepsWordTiming" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.0"/>
+  <testcase name="parse_realWorldBrokenEnhancedLrcPairsAllTranslations" classname="me.spica27.spicamusic.common.utils.LrcParserTest" time="0.045"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

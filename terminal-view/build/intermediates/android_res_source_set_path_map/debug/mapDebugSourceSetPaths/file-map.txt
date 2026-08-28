@@ -1,0 +1,9 @@
+com.termux.view.terminal-view-pngs-0 /workspace/terminal-view/build/generated/res/pngs/debug
+com.termux.view.terminal-view-updated_navigation_xml-1 /workspace/terminal-view/build/generated/updated_navigation_xml/debug
+com.termux.view.terminal-view-mergeDebugResources-2 /workspace/terminal-view/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+com.termux.view.terminal-view-mergeDebugResources-3 /workspace/terminal-view/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+com.termux.view.terminal-view-debug-4 /workspace/terminal-view/build/intermediates/merged_res/debug/mergeDebugResources
+com.termux.view.terminal-view-debug-5 /workspace/terminal-view/build/intermediates/packaged_res/debug/packageDebugResources
+com.termux.view.terminal-view-debug-6 /workspace/terminal-view/src/debug/res
+com.termux.view.terminal-view-main-7 /workspace/terminal-view/src/main/res
+gradleHome-0 /root/.gradle

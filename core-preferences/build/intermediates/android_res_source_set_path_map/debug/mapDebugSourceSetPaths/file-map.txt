@@ -1,0 +1,9 @@
+me.spica27.spicamusic.core.preferences.core-preferences-pngs-0 /workspace/core-preferences/build/generated/res/pngs/debug
+me.spica27.spicamusic.core.preferences.core-preferences-updated_navigation_xml-1 /workspace/core-preferences/build/generated/updated_navigation_xml/debug
+me.spica27.spicamusic.core.preferences.core-preferences-mergeDebugResources-2 /workspace/core-preferences/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+me.spica27.spicamusic.core.preferences.core-preferences-mergeDebugResources-3 /workspace/core-preferences/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+me.spica27.spicamusic.core.preferences.core-preferences-debug-4 /workspace/core-preferences/build/intermediates/merged_res/debug/mergeDebugResources
+me.spica27.spicamusic.core.preferences.core-preferences-debug-5 /workspace/core-preferences/build/intermediates/packaged_res/debug/packageDebugResources
+me.spica27.spicamusic.core.preferences.core-preferences-debug-6 /workspace/core-preferences/src/debug/res
+me.spica27.spicamusic.core.preferences.core-preferences-main-7 /workspace/core-preferences/src/main/res
+gradleHome-0 /root/.gradle

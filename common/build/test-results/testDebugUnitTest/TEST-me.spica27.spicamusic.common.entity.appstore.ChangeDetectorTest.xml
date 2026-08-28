@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.spica27.spicamusic.common.entity.appstore.ChangeDetectorTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-28T03:09:51.834Z" hostname="all-in-one-64-m9xng" time="0.005">
+  <properties/>
+  <testcase name="apply incremental yields new index" classname="me.spica27.spicamusic.common.entity.appstore.ChangeDetectorTest" time="0.002"/>
+  <testcase name="no change when identical" classname="me.spica27.spicamusic.common.entity.appstore.ChangeDetectorTest" time="0.0"/>
+  <testcase name="detect added changed removed" classname="me.spica27.spicamusic.common.entity.appstore.ChangeDetectorTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

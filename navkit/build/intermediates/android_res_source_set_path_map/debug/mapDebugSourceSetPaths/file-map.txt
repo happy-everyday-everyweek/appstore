@@ -1,0 +1,9 @@
+me.spica27.navkit-pngs-0 /workspace/navkit/build/generated/res/pngs/debug
+me.spica27.navkit-updated_navigation_xml-1 /workspace/navkit/build/generated/updated_navigation_xml/debug
+me.spica27.navkit-mergeDebugResources-2 /workspace/navkit/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+me.spica27.navkit-mergeDebugResources-3 /workspace/navkit/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+me.spica27.navkit-debug-4 /workspace/navkit/build/intermediates/merged_res/debug/mergeDebugResources
+me.spica27.navkit-debug-5 /workspace/navkit/build/intermediates/packaged_res/debug/packageDebugResources
+me.spica27.navkit-debug-6 /workspace/navkit/src/debug/res
+me.spica27.navkit-main-7 /workspace/navkit/src/main/res
+gradleHome-0 /root/.gradle

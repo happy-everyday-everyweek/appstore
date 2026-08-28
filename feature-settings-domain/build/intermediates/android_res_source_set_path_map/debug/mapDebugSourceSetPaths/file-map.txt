@@ -1,0 +1,9 @@
+me.spica27.spicamusic.feature.settings.domain.feature-settings-domain-pngs-0 /workspace/feature-settings-domain/build/generated/res/pngs/debug
+me.spica27.spicamusic.feature.settings.domain.feature-settings-domain-updated_navigation_xml-1 /workspace/feature-settings-domain/build/generated/updated_navigation_xml/debug
+me.spica27.spicamusic.feature.settings.domain.feature-settings-domain-mergeDebugResources-2 /workspace/feature-settings-domain/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
+me.spica27.spicamusic.feature.settings.domain.feature-settings-domain-mergeDebugResources-3 /workspace/feature-settings-domain/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
+me.spica27.spicamusic.feature.settings.domain.feature-settings-domain-debug-4 /workspace/feature-settings-domain/build/intermediates/merged_res/debug/mergeDebugResources
+me.spica27.spicamusic.feature.settings.domain.feature-settings-domain-debug-5 /workspace/feature-settings-domain/build/intermediates/packaged_res/debug/packageDebugResources
+me.spica27.spicamusic.feature.settings.domain.feature-settings-domain-debug-6 /workspace/feature-settings-domain/src/debug/res
+me.spica27.spicamusic.feature.settings.domain.feature-settings-domain-main-7 /workspace/feature-settings-domain/src/main/res
+gradleHome-0 /root/.gradle

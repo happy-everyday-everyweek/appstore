@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="me.spica27.spicamusic.common.entity.appstore.DiscoverIndexParserTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-08-28T03:09:51.843Z" hostname="all-in-one-64-m9xng" time="0.005">
+  <properties/>
+  <testcase name="parse three cards with background variants" classname="me.spica27.spicamusic.common.entity.appstore.DiscoverIndexParserTest" time="0.004"/>
+  <testcase name="card without background falls back to default" classname="me.spica27.spicamusic.common.entity.appstore.DiscoverIndexParserTest" time="0.0"/>
+  <testcase name="parse empty card list" classname="me.spica27.spicamusic.common.entity.appstore.DiscoverIndexParserTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
