@@ -7,6 +7,7 @@ import me.spica27.spicamusic.common.entity.appstore.ManifestIndexRef
 import me.spica27.spicamusic.common.entity.appstore.ManifestObjectRef
 import me.spica27.spicamusic.common.entity.appstore.ManifestV2
 import me.spica27.spicamusic.common.entity.appstore.ManifestV2Parser
+import me.spica27.spicamusic.store.gitlink.MirrorNotFound
 import me.spica27.spicamusic.store.gitlink.ObjectFetcher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,6 +36,8 @@ class ManifestSyncEngineTest {
         "https://raw.githubusercontent.com/${SyncChannel.AppIndex.repo}/main/dist/manifest.v2.json"
     private val indexRaw =
         "https://raw.githubusercontent.com/${SyncChannel.AppIndex.repo}/main/dist/index.v2.json"
+    private val indexRelease =
+        "https://github.com/${SyncChannel.AppIndex.repo}/releases/latest/download/index.v2.json"
 
     private fun iconUrl(id: String): String =
         "https://raw.githubusercontent.com/${SyncChannel.AppIndex.repo}/main/apps/o/r/icon.png".replace("/o/r/", "/$id/")
@@ -54,7 +57,8 @@ class ManifestSyncEngineTest {
         ): File {
             downloaded += url
             if (url in failUrls) throw IOException("模拟失败:$url")
-            val data = files[url] ?: throw IOException("no asset $url")
+            // 未提供的资源视为 404（v2 协议探测 / 通道兜底依赖 MirrorNotFound）
+            val data = files[url] ?: throw MirrorNotFound(url)
             dest.parentFile?.mkdirs()
             dest.writeBytes(data)
             onProgress(1f)
@@ -100,6 +104,7 @@ class ManifestSyncEngineTest {
         buildMap {
             put(manifestRaw, manifest.toByteArray())
             put(indexRaw, indexText.toByteArray())
+            put(indexRelease, indexText.toByteArray()) // index 经 release 通道优先（§6.5）
             iconData.forEach { (id, bytes) -> put(iconUrl(id), bytes) }
         }
 
@@ -225,5 +230,24 @@ class ManifestSyncEngineTest {
             assertTrue(r2.isOk)
             assertTrue("1049 补齐", store.iconMarker("1049").exists())
             assertEquals("幂等：仅下载缺失图标", listOf(iconUrl("1049")), fetcher2.downloaded.filter { it.contains("/icon.png") })
+        }
+
+    @Test
+    fun `index 未变且全部图标失败时返回错误而非误报成功`() =
+        runTest {
+            val store = SyncStore(tmp.newFolder())
+            // 预置 index 与 manifest 声明 SHA 一致，隔离「仅图标失败」场景
+            store.writeIndexV2(indexText)
+            val icons = listOf(iconRef("1048"), iconRef("1049"))
+            val manifest = manifestOf(icons)
+            val fetcher = FakeObjectFetcher(filesFor(manifest), failUrls = setOf(iconUrl("1048"), iconUrl("1049")))
+            val engine = ManifestSyncEngine(fetcher, store)
+
+            val r = engine.sync()
+
+            assertFalse("无任何进展应报错而非误报成功", r.isOk)
+            assertEquals("无进展归为网络错误", SyncError.Network, r.error)
+            assertNull("不应落快照（未产生任何进展）", store.readManifestSnapshot())
+            assertFalse("失败图标不应残留标记", store.iconMarker("1048").exists())
         }
 }

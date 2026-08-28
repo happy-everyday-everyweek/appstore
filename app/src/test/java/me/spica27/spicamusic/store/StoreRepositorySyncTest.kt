@@ -1,6 +1,7 @@
 package me.spica27.spicamusic.store
 
 import kotlinx.coroutines.test.runTest
+import me.spica27.spicamusic.store.gitlink.MirrorNotFound
 import me.spica27.spicamusic.store.gitlink.ObjectFetcher
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -41,7 +42,7 @@ class StoreRepositorySyncTest {
         }
     }
 
-    /** v2 探测期 Fake：manifest.v2.json 全部 404 → 引擎返回 usedV2=false，触发 v1 回退 */
+    /** v2 探测期 Fake：manifest.v2.json 全部 404（MirrorNotFound）→ 引擎返回 usedV2=false，触发 v1 回退 */
     private class FakeV2Fetcher : ObjectFetcher {
         override suspend fun download(
             url: String,
@@ -49,7 +50,7 @@ class StoreRepositorySyncTest {
             expectedSha256: String?,
             onProgress: (Float) -> Unit,
             isRaw: Boolean,
-        ): File = throw java.io.IOException("v2 未启用（404）:$url")
+        ): File = throw MirrorNotFound(url)
     }
 
     private fun repository(

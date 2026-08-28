@@ -78,4 +78,41 @@ class AppIndexParserTest {
         val index = AppIndexParser.parse("""{"1003":{"id":"1003","name":"X","packageName":"p.x"}}""")
         assertEquals("", index["1003"]!!.version.versionName)
     }
+
+    @Test
+    fun `parseV2 rewrites icon id to local asset path and reads iconBlurhash`() {
+        val v2Index =
+            """{
+              "2001": {
+                "id": "2001",
+                "name": "V2App",
+                "icon": "1048",
+                "iconBlurhash": "UBIAXtP00000~q%L00IU0000x]",
+                "summary": "s",
+                "openSource": true,
+                "grade": "D",
+                "version": { "versionName": "1.0", "versionCode": 2 }
+              }
+            }"""
+        val index = AppIndexParser.parseV2(v2Index)
+
+        val app = index["2001"]!!
+        assertEquals("图标 id 重写为本地资产路径", "assets/icons/1048.png", app.icon)
+        assertEquals("iconBlurhash 解析", "UBIAXtP00000~q%L00IU0000x]", app.iconBlurhash)
+    }
+
+    @Test
+    fun `parseV2 keeps http and assets prefixed icons untouched`() {
+        val v2Index =
+            """{
+              "2001": {"id":"2001","name":"A","icon":"https://example.com/i.png","iconBlurhash":""},
+              "2002": {"id":"2002","name":"B","icon":"assets/icons/9.png","iconBlurhash":""},
+              "2003": {"id":"2003","name":"C","icon":"","iconBlurhash":""}
+            }"""
+        val index = AppIndexParser.parseV2(v2Index)
+
+        assertEquals("http 图标原样保留", "https://example.com/i.png", index["2001"]!!.icon)
+        assertEquals("assets 前缀原样保留", "assets/icons/9.png", index["2002"]!!.icon)
+        assertEquals("空图标按 id 兜底", "assets/icons/2003.png", index["2003"]!!.icon)
+    }
 }

@@ -67,7 +67,7 @@ class SyncStore(
     }
 
     fun writeManifestSnapshot(text: String) {
-        File(dir, "manifest.snapshot.json").writeText(text)
+        atomicWrite(File(dir, "manifest.snapshot.json"), text)
     }
 
     // ---- v2：列表索引（index.v2.json，与 v1 缓存文件并存） ----
@@ -77,8 +77,23 @@ class SyncStore(
         return if (f.exists()) f.readText() else null
     }
 
+    /** 原子替换本地索引（§6.1.3a）：先写临时文件再 rename，崩溃/中断不会留下半截 index */
     fun writeIndexV2(text: String) {
-        File(dir, "index.v2.json").writeText(text)
+        atomicWrite(File(dir, "index.v2.json"), text)
+    }
+
+    /** 原子写入：同目录临时文件 + rename（同文件系统 rename 为原子操作），失败兜底直接写 */
+    private fun atomicWrite(
+        target: File,
+        text: String,
+    ) {
+        target.parentFile?.mkdirs()
+        val tmp = File(target.parentFile, "${target.name}.tmp")
+        tmp.writeText(text)
+        if (!tmp.renameTo(target)) {
+            target.writeText(text)
+            tmp.delete()
+        }
     }
 
     // ---- v2：图标（assets/icons/<id>.png + SHA-256 标记，幂等续传） ----
