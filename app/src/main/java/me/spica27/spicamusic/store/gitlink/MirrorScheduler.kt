@@ -101,7 +101,9 @@ class MirrorScheduler(
         val candidates =
             buildList {
                 addAll(ranked.take(TOP_N))
-                // GitHub 直连无法代理 raw.githubusercontent.com（§6.5：raw 仅路由到支持 raw 的镜像）
+                // GitHub 直连腿（§6.3）：仅对 github.com/releases 类 URL 有效——「github」镜像的
+                // prefix 是 https://github.com/，raw.githubusercontent.com 不在其代理范围，
+                // raw 对象经 rawOk 镜像路由（§6.5），故不叠加直连。
                 if (!isRaw) {
                     mirrors.firstOrNull { it.id == DIRECT_ID }?.takeIf { it !in this }?.let { add(it) }
                 }
@@ -201,7 +203,7 @@ class MirrorScheduler(
         return orderCandidates(updated, isRaw)
     }
 
-    /** 候选排序：曾成功优先、延迟升序；连续失败 ≥3 会话内降级；raw 路由偏好 rawOk 镜像 */
+    /** 候选排序：曾成功优先、延迟升序；连续失败 ≥3 会话内降级；raw 通道偏好 rawOk、release 通道偏好 releaseOk（§6.5 双可达性位） */
     private fun orderCandidates(
         state: MirrorStateSnapshot,
         isRaw: Boolean,
@@ -216,9 +218,9 @@ class MirrorScheduler(
             )
         val (bad, good) = sorted.partition { (entries[it.id]?.fails ?: 0) >= FAIL_DEMOTE }
         val ordered = good + bad
-        if (!isRaw) return ordered
-        val rawCapable = ordered.filter { entries[it.id]?.rawOk == true }
-        return if (rawCapable.isNotEmpty()) rawCapable + ordered.filter { it !in rawCapable } else ordered
+        // 通道可达性偏好：raw 对象优先 rawOk 镜像、release 对象优先 releaseOk 镜像（其余保留兜底）
+        val capable = ordered.filter { entries[it.id]?.let { e -> if (isRaw) e.rawOk else e.releaseOk } == true }
+        return if (capable.isNotEmpty()) capable + ordered.filter { it !in capable } else ordered
     }
 
     private data class ProbeResult(

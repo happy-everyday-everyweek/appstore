@@ -231,4 +231,23 @@ class ManifestSyncEngineTest {
             assertTrue("1049 补齐", store.iconMarker("1049").exists())
             assertEquals("幂等：仅下载缺失图标", listOf(iconUrl("1049")), fetcher2.downloaded.filter { it.contains("/icon.png") })
         }
+
+    @Test
+    fun `index 未变且全部图标失败时返回错误而非误报成功`() =
+        runTest {
+            val store = SyncStore(tmp.newFolder())
+            // 预置 index 与 manifest 声明 SHA 一致，隔离「仅图标失败」场景
+            store.writeIndexV2(indexText)
+            val icons = listOf(iconRef("1048"), iconRef("1049"))
+            val manifest = manifestOf(icons)
+            val fetcher = FakeObjectFetcher(filesFor(manifest), failUrls = setOf(iconUrl("1048"), iconUrl("1049")))
+            val engine = ManifestSyncEngine(fetcher, store)
+
+            val r = engine.sync()
+
+            assertFalse("无任何进展应报错而非误报成功", r.isOk)
+            assertEquals("无进展归为网络错误", SyncError.Network, r.error)
+            assertNull("不应落快照（未产生任何进展）", store.readManifestSnapshot())
+            assertFalse("失败图标不应残留标记", store.iconMarker("1048").exists())
+        }
 }

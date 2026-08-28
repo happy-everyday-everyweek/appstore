@@ -86,8 +86,9 @@ class ManifestSyncEngine(
         )
 
         // 2. COMPARE（index + 图标；bundle 不参与更新判定）
+        // index 以本地文件实际 SHA 与 manifest 比对：缺失 / 内容损坏 / 版本滞后均视为需重拉
         val snapshot = readSnapshot()
-        val indexChanged = snapshot?.index?.sha256 != manifest.index.sha256 || store.readIndexV2() == null
+        val indexChanged = indexV2Sha() != manifest.index.sha256
         val missingIcons = manifest.icons.filterNot { isIconCurrent(it) }
         if (!indexChanged && missingIcons.isEmpty()) {
             // 无资产变化：仍将快照推进到最新 manifest（manifest 是唯一版本真相，tag 可能已更新）
@@ -99,6 +100,7 @@ class ManifestSyncEngine(
         }
 
         // 3. SYNC_INDEX_AND_ICONS
+        var indexUpdated = false
         if (indexChanged) {
             onStage?.invoke("正在同步应用列表…")
             val indexText =
@@ -115,10 +117,18 @@ class ManifestSyncEngine(
                 return networkError(msg)
             }
             store.writeIndexV2(indexText)
+            indexUpdated = true
             DebugLog.i("Sync", "[v2] index.v2.json 已更新（${indexText.length} 字节，SHA=${manifest.index.sha256.take(8)}…）")
         }
+        var iconSynced = 0
         if (missingIcons.isNotEmpty()) {
-            syncIcons(missingIcons)
+            iconSynced = syncIcons(missingIcons)
+        }
+        // 无任何进展（index 未变且所有缺失图标均失败）→ 报错而非误报成功（partial 全败，下次自动续）
+        if (!indexUpdated && missingIcons.isNotEmpty() && iconSynced == 0) {
+            val msg = "v2 同步无进展：待同步图标（${missingIcons.size} 个）全部下载失败且 index 未变化"
+            DebugLog.e("Sync", "[v2] $msg")
+            return SyncResult(changed = false, applied = null, error = SyncError.Network, errorMessage = msg, usedV2 = true)
         }
         // 清理：下架图标 / 过期 bundle 缓存（bundle 仅对比 SHA 表，不下载）
         store.deleteStaleIcons(manifest.icons.map { it.id }.toSet())
@@ -165,8 +175,8 @@ class ManifestSyncEngine(
     /**
      * 拉取 index.v2.json 并校验 manifest 声明的 SHA。
      * 列表功能经 release 通道优先（§6.5：raw CDN 缓存滞后不影响列表）；
-     * raw 通道在 SHA 缓存滞后时按 1s/5s/30s 退避重试（SHA 不符由调度器内部降级该镜像，
-     * 每次退避相当于换候选集），仍失败返回 null 由调用方转 Network 错误。
+     * raw 通道在 SHA 缓存滞后时按 1s/5s/30s 退避重试（每次退避相当于换候选集），
+     * 仍失败返回 null 由调用方转 Network 错误。
      */
     private suspend fun fetchIndex(expectedSha: String): String? {
         try {
@@ -174,15 +184,30 @@ class ManifestSyncEngine(
         } catch (e: MirrorNotFound) {
             // 通道不可用，走 raw 兜底
         }
-        for (backoff in RAW_CACHE_BACKOFF_MS) {
-            delay(backoff)
+        return fetchRawWithBackoff("$rawDistBase/index.v2.json", expectedSha)?.toString(Charsets.UTF_8)
+    }
+
+    /**
+     * raw 通道资产下载 + 缓存滞后退避（§6.5：manifest 已拿到新 SHA 而镜像 CDN 仍返回旧内容
+     * → SHA 校验失败 → 按 1s/5s/30s 退避重试；最后仍失败返回 null）。404 视为通道不可用直接返回 null。
+     * icons 与 index 的 raw 通道共用；调度器内置 SHA 校验，此处再防御性复核。
+     */
+    private suspend fun fetchRawWithBackoff(
+        url: String,
+        expectedSha: String,
+    ): ByteArray? {
+        for ((i, backoff) in (listOf(0L) + RAW_CACHE_BACKOFF_MS).withIndex()) {
+            if (backoff > 0) delay(backoff)
             try {
-                fetchValidated("$rawDistBase/index.v2.json", isRaw = true, expectedSha)?.let { return it }
+                val bytes = fetchBytes(url, isRaw = true, expectedSha)
+                if (sha256(bytes) == expectedSha) return bytes
+                // SHA 不符（镜像 CDN 缓存滞后）→ 退避重试，§6.5
             } catch (e: MirrorNotFound) {
-                return null // raw 404 → 无更多通道
+                return null // 404 → 通道不可用，无更多来源
             } catch (e: IOException) {
-                // raw CDN 缓存滞后（SHA 不符）或网络抖动：退避重试，§6.5
+                // 网络抖动 → 退避重试
             }
+            if (i >= RAW_CACHE_BACKOFF_MS.size) return null
         }
         return null
     }
@@ -222,6 +247,9 @@ class ManifestSyncEngine(
 
     private fun readSnapshot(): ManifestV2? = store.readManifestSnapshot()?.let { runCatching { ManifestV2Parser.parse(it) }.getOrNull() }
 
+    /** 本地 index.v2.json 的 SHA-256（缺失/损坏 → null，触发重拉） */
+    private fun indexV2Sha(): String? = store.readIndexV2()?.let { sha256(it.toByteArray()) }
+
     /** 图标当前判定：文件存在 + sha256 标记与 manifest 一致（幂等，不逐文件哈希） */
     private fun isIconCurrent(ref: ManifestObjectRef): Boolean {
         val f = store.iconFile(ref.id)
@@ -231,28 +259,39 @@ class ManifestSyncEngine(
 
     // ---- SYNC_INDEX_AND_ICONS ----
 
-    private suspend fun syncIcons(icons: List<ManifestObjectRef>) {
+    /** 批量下载缺失图标（并发 ≤6），返回成功数（供 partial 无进展判定） */
+    private suspend fun syncIcons(icons: List<ManifestObjectRef>): Int {
         var done = 0
+        var ok = 0
         val total = icons.size
         onStage?.invoke("正在补齐图标（0/$total）…")
         icons.chunked(ICON_CONCURRENCY).forEach { batch ->
-            coroutineScope { batch.map { ref -> async { downloadIcon(ref) } }.awaitAll() }
+            coroutineScope { batch.map { ref -> async { if (downloadIcon(ref)) ok++ } }.awaitAll() }
             done += batch.size
             onStage?.invoke("正在补齐图标（$done/$total）…")
         }
+        return ok
     }
 
-    private suspend fun downloadIcon(ref: ManifestObjectRef) {
+    /**
+     * 单个图标下载：raw 通道 + 缓存滞后退避（§6.5）。成功写 sha256 标记；
+     * 失败返回 false（标记未写 → 下次同步差集逻辑幂等补齐），不抛异常中断整批。
+     */
+    private suspend fun downloadIcon(ref: ManifestObjectRef): Boolean {
         val url = "$rawMainBase/${ref.path}"
         val dest = store.iconFile(ref.id)
         try {
-            fetcher.download(url, dest, ref.sha256, onProgress = { p -> onProgress?.invoke(p) }, isRaw = true)
+            val bytes = fetchRawWithBackoff(url, ref.sha256) ?: return false
+            dest.parentFile?.mkdirs()
+            dest.writeBytes(bytes)
             store.iconMarker(ref.id).writeText(ref.sha256)
             DebugLog.i("Sync", "[v2] 图标 ${ref.id} 已同步（${dest.length()}B）")
+            return true
         } catch (e: Exception) {
             // 图标批量下载中途失败 → 本次同步标记 partial，下次自动续（标记未写，差集逻辑幂等）
             DebugLog.w("Sync", "[v2] 图标 ${ref.id} 同步失败：${e.message ?: e::class.simpleName}（partial，下次自动续）")
             runCatching { dest.delete() }
+            return false
         }
     }
 

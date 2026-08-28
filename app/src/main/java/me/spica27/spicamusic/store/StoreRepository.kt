@@ -81,23 +81,12 @@ class StoreRepository(
         reloadFromCache()
     }
 
-    private suspend fun refreshInternal() {
-        v1Engine.onProgress = { _downloadProgress.value = it }
-        v1Engine.onStage = { _syncStage.value = it }
-        v2Engine.onProgress = { _downloadProgress.value = it }
-        v2Engine.onStage = { _syncStage.value = it }
-        DebugLog.i("Sync", "开始静默增量同步（${SyncChannel.AppIndex.repo} / ${SyncChannel.Discover.repo}）")
-        val r1 = syncAppIndex(SyncMode.Auto)
-        val r2 = v1Engine.sync(SyncChannel.Discover, SyncMode.Auto)
-        _lastError.value = syncErrorOf(r1) ?: syncErrorOf(r2)
-        _syncStage.value = null
-        if (_lastError.value == null) DebugLog.i("Sync", "双通道同步完成")
-    }
+    private suspend fun refreshInternal() = runSync(SyncMode.Auto)
 
     /** AppIndex 通道：v2 引擎先探测，usedV2=false（manifest.v2 404）时回退 v1 引擎 */
     private suspend fun syncAppIndex(mode: SyncMode): SyncResult {
-        val r2 = v2Engine.sync()
-        if (r2.usedV2) return r2
+        val v2Result = v2Engine.sync()
+        if (v2Result.usedV2) return v2Result
         DebugLog.i("Sync", "[v2] AppIndex 无 manifest.v2.json，回退 v1 引擎")
         return v1Engine.sync(SyncChannel.AppIndex, mode)
     }
@@ -114,15 +103,23 @@ class StoreRepository(
         reloadFromCache()
     }
 
-    private suspend fun forceFullInternal() {
+    private suspend fun forceFullInternal() = runSync(SyncMode.Full)
+
+    /**
+     * 双通道同步：AppIndex 走 v2→v1 回退，Discover 维持 v1；
+     * 统一挂载进度/阶段回调并合并两通道错误（优先 AppIndex 的详细错误）。
+     */
+    private suspend fun runSync(mode: SyncMode) {
         v1Engine.onProgress = { _downloadProgress.value = it }
         v1Engine.onStage = { _syncStage.value = it }
         v2Engine.onProgress = { _downloadProgress.value = it }
         v2Engine.onStage = { _syncStage.value = it }
-        val r1 = syncAppIndex(SyncMode.Full)
-        val r2 = v1Engine.sync(SyncChannel.Discover, SyncMode.Full)
-        _lastError.value = syncErrorOf(r1) ?: syncErrorOf(r2)
+        DebugLog.i("Sync", "开始双通道同步（${SyncChannel.AppIndex.repo} / ${SyncChannel.Discover.repo}）")
+        val appIndexResult = syncAppIndex(mode)
+        val discoverResult = v1Engine.sync(SyncChannel.Discover, mode)
+        _lastError.value = syncErrorOf(appIndexResult) ?: syncErrorOf(discoverResult)
         _syncStage.value = null
+        if (_lastError.value == null) DebugLog.i("Sync", "双通道同步完成")
     }
 
     /** 关闭当前同步失败横幅（仅本次会话展示） */
