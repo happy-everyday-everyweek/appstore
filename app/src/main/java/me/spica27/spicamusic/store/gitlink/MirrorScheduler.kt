@@ -110,7 +110,8 @@ class MirrorScheduler(
             }
         DebugLog.i("Download", "[v2] 候选源：${candidates.joinToString { it.name }}")
         var lastErr: Throwable = IOException("无可用镜像")
-        var saw404 = false
+        var notFound404 = 0
+        var otherFailures = 0
         var tried = 0
         var i = 0
         while (i < candidates.size && tried < MAX_ATTEMPTS) {
@@ -125,12 +126,14 @@ class MirrorScheduler(
                     is StreamResult.Completed -> {
                         if (dest.length() < 1) {
                             lastErr = IOException("下载文件为空（0B），疑似空响应")
+                            otherFailures++
                             recordFail(blamed)
                             dest.delete()
                             continue
                         }
                         if (expectedSha256 != null && sha256(dest) != expectedSha256) {
                             lastErr = IOException("SHA-256 不一致：期望 ${expectedSha256.take(8)}…")
+                            otherFailures++
                             recordFail(blamed)
                             dest.delete()
                             continue
@@ -141,7 +144,7 @@ class MirrorScheduler(
                         return dest
                     }
                     is StreamResult.Aborted -> {
-                        if (result.code == 404) saw404 = true
+                        if (result.code == 404) notFound404++ else otherFailures++
                         lastErr = IOException("镜像组失败：${result.reason}")
                         if (result.restartRequired) dest.delete()
                         // 竞速批内每个失败源独立累计（修复：不只记 blamed 首个，保证连续失败≥3 降级准确）
@@ -150,12 +153,18 @@ class MirrorScheduler(
                 }
             } catch (e: Exception) {
                 lastErr = e
+                otherFailures++
                 batch.forEach { recordFail(it) }
                 runCatching { dest.delete() }
             }
         }
         DebugLog.e("Download", "[v2] 全部候选源失败（尝试 $tried 个）：${lastErr.message}")
-        throw if (saw404) MirrorNotFound(url) else IOException("镜像全部失败（尝试 $tried 个）：${lastErr.message}", lastErr)
+        // 仅当所有失败都是 404 才判定资产不存在：MirrorNotFound 会被上层当作「对方仍为 v1 形态」的权威结论
+        throw if (tried > 0 && notFound404 > 0 && otherFailures == 0) {
+            MirrorNotFound(url)
+        } else {
+            IOException("镜像全部失败（尝试 $tried 个）：${lastErr.message}", lastErr)
+        }
     }
 
     /** 会话/持久化探测：TTL 内复用，否则并发轻探测一次并落盘 */

@@ -82,6 +82,12 @@ class SyncStore(
         atomicWrite(File(dir, "index.v2.json"), text)
     }
 
+    /** 失效本地 v2 缓存：对方回到 v1 形态且 v1 同步成功时调用，否则 reloadFromCache 会一直优先读过期 v2 快照 */
+    fun clearIndexV2() {
+        File(dir, "index.v2.json").delete()
+        File(dir, "manifest.snapshot.json").delete()
+    }
+
     /** 原子写入：同目录临时文件 + rename（同文件系统 rename 为原子操作），失败兜底直接写 */
     private fun atomicWrite(
         target: File,
