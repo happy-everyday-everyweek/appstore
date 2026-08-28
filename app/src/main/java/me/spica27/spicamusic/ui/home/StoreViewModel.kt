@@ -12,6 +12,7 @@ import kotlinx.coroutines.withContext
 import me.spica27.spicamusic.common.entity.appstore.AppIndex
 import me.spica27.spicamusic.common.entity.appstore.AppMeta
 import me.spica27.spicamusic.common.entity.appstore.DiscoverIndex
+import me.spica27.spicamusic.store.BundleLoader
 import me.spica27.spicamusic.store.DebugLog
 import me.spica27.spicamusic.store.Downloader
 import me.spica27.spicamusic.store.SelfUpdater
@@ -27,6 +28,7 @@ class StoreViewModel(
     private val repository: StoreRepository,
     private val updater: SelfUpdater,
     private val downloader: Downloader,
+    private val bundleLoader: BundleLoader,
 ) : ViewModel() {
     val apps: StateFlow<AppIndex> = repository.apps
     val cards: StateFlow<DiscoverIndex> = repository.cards
@@ -59,6 +61,60 @@ class StoreViewModel(
 
     private val _lastDownloadedApk = MutableStateFlow<String?>(null)
     val lastDownloadedApk: StateFlow<String?> = _lastDownloadedApk.asStateFlow()
+
+    /**
+     * 详情包懒加载状态（v2 §6.1 FETCH_BUNDLE）。
+     * meta 为合并 bundle 详情后的完整元数据（成功加载）；加载中/失败由 loading/error 表达。
+     */
+    data class BundleUi(
+        val appId: String = "",
+        val meta: AppMeta? = null,
+        val loading: Boolean = false,
+        val progress: Float = 0f,
+        val error: String? = null,
+    )
+
+    private val _bundleUi = MutableStateFlow<BundleUi?>(null)
+    val bundleUi: StateFlow<BundleUi?> = _bundleUi.asStateFlow()
+
+    /**
+     * 进入详情页时调用：本地无缓存/过期才经镜像调度器下载 bundle 并合并详情数据。
+     * 清单无该应用的 bundle 条目（v1 通道或未收录详情）→ 静默结束，详情页回落列表元数据。
+     */
+    fun loadBundle(app: AppMeta) {
+        val cur = _bundleUi.value
+        if (cur?.appId == app.id && (cur.loading || cur.meta != null)) return
+        val ref = bundleLoader.bundleRef(app.id)
+        if (ref == null) {
+            DebugLog.i("Bundle", "[v2] 应用 ${app.id} 清单无 bundle 条目，跳过懒加载（回落列表数据）")
+            _bundleUi.value = BundleUi(appId = app.id)
+            return
+        }
+        viewModelScope.launch {
+            _bundleUi.value = BundleUi(appId = app.id, loading = true)
+            try {
+                val detail =
+                    withContext(Dispatchers.IO) {
+                        bundleLoader.loadBundle(app.id) { p ->
+                            _bundleUi.value = _bundleUi.value?.copy(progress = p)
+                        }
+                    }
+                val merged = bundleLoader.merge(app, detail)
+                DebugLog.i("Bundle", "[v2] 应用 ${app.id} 详情已就绪（permissions=${detail.permissions.size} readme=${detail.readme}）")
+                _bundleUi.value = BundleUi(appId = app.id, meta = merged, loading = false)
+            } catch (e: Exception) {
+                val msg = "详情加载失败：${e.message ?: e::class.simpleName}"
+                DebugLog.w("Bundle", "[v2] 应用 ${app.id} $msg")
+                _bundleUi.value = BundleUi(appId = app.id, loading = false, error = msg)
+            }
+        }
+    }
+
+    /** 详情页“重试”按钮：清除失败态并重新加载 bundle */
+    fun retryBundle(app: AppMeta) {
+        _bundleUi.value = null
+        loadBundle(app)
+    }
 
     init {
         bootstrap()

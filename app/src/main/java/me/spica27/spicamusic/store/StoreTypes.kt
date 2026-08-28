@@ -13,13 +13,18 @@ enum class SyncChannel(
 enum class SyncMode { Auto, Full }
 
 /** 本次同步应用了哪种包 */
-enum class PackageKind { Full, Incremental, None }
+enum class PackageKind { Full, Incremental, Manifest, None }
 
 data class SyncResult(
     val changed: Boolean,
     val applied: PackageKind?,
     val error: SyncError? = null,
     val errorMessage: String? = null,
+    /**
+     * v2 协议可用性标记：v2 引擎探测到 manifest.v2.json（HTTP 200）为 true；
+     * 全部 404（对方仍是 v1 形态）为 false，由仓库层回退旧引擎。
+     */
+    val usedV2: Boolean = true,
 ) {
     val isOk: Boolean get() = error == null
 }

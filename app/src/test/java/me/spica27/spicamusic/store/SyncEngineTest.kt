@@ -211,13 +211,14 @@ class SyncEngineTest {
         }
 
     @Test
-    fun `链长超过上限时直接回退全量包`() =
+    fun `4 级链在字节决策上限内时应用完整增量链`() =
         runTest {
             val root = SyncStore(tmp.newFolder())
             root.writeCachedText(SyncChannel.AppIndex, indexJson("1001"))
             root.writeVersion(SyncChannel.AppIndex, "aggregate-0")
-            // 本地落后 3 个版本（0 -> 1 -> 2 -> 3 -> 4），链长 4 超过 CHAIN_LIMIT=3。
-            // 即使各级增量包完整存在，也必须走全量（逐级应用数小时/数天，一次全量分钟级）。
+            // 本地落后 3 个版本（0 -> 1 -> 2 -> 3 -> 4）。
+            // 字节决策（MAX_CHAIN_LENGTH=20 / UNKNOWN_SIZE_LIMIT=5）：各级增量包大小在
+            // 测试环境不可探测（unknown=4 ≤ 5）、累计 < 全量，完整链被逐级应用。
             val files =
                 mapOf(
                     baseUrl() + "/patch.json" to patchJson("aggregate-3", "aggregate-4").toByteArray(),
@@ -235,11 +236,11 @@ class SyncEngineTest {
                 )
             val engine = buildEngine(root, files)
             val result = engine.sync(SyncChannel.AppIndex)
-            assertEquals(PackageKind.Full, result.applied)
+            assertEquals(PackageKind.Incremental, result.applied)
             assertTrue(result.changed)
             val cached = root.readCachedText(SyncChannel.AppIndex)
             assertNotNull(cached)
-            assertTrue("应应用全量索引而非链式增量", cached!!.contains("2001"))
+            assertTrue("应逐级应用链式增量直至最新", cached!!.contains("1005"))
             assertEquals("aggregate-4", root.readVersion(SyncChannel.AppIndex))
         }
 
