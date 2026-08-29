@@ -176,48 +176,48 @@ class MirrorScheduler(
     private suspend fun ensureProbed(
         url: String,
         isRaw: Boolean,
-    ): List<Mirror> {
-        val now = System.currentTimeMillis()
-        val state = sessionState ?: stateStore.load()
-        if (state.probedAt > 0 && now - state.probedAt < PROBE_TTL_MS) {
-            sessionState = state
-            return orderCandidates(state, isRaw)
-        }
-        DebugLog.i("Download", "[v2] 会话首次探测全部镜像（Range 0-0，轻量）…")
-        onStage?.invoke("正在探测镜像源…")
-        val results =
-            withContext(Dispatchers.IO) {
-                coroutineScope {
-                    mirrors.map { m -> async { m to probeLatency(m.prefix + url) } }.awaitAll()
-                }
-            }
-        var updated = state.copy(probedAt = now)
-        // 探测 URL 的通道决定本轮记录哪个可达性位（§6.5：release/raw 分别记录）
-        results.forEach { (m, r) ->
-            val prev = updated.mirrors[m.id] ?: MirrorStateEntry()
-            updated =
-                updated.copy(
-                    mirrors =
-                        updated.mirrors +
-                            (
-                                m.id to
-                                    MirrorStateEntry(
-                                        latencyMs = r.latencyMs,
-                                        lastOkAt = if (r.ok) now else prev.lastOkAt,
-                                        fails = if (r.ok) 0 else prev.fails,
-                                        ewmaBps = prev.ewmaBps,
-                                        rawOk = prev.rawOk || (r.ok && isRaw),
-                                        releaseOk = prev.releaseOk || (r.ok && !isRaw),
-                                    )
-                            ),
-                )
-        }
+    ): List<Mirror> =
         stateMutex.withLock {
+            val now = System.currentTimeMillis()
+            val state = sessionState ?: stateStore.load()
+            // 锁内双检 TTL：命中即复用，保证并发只探一轮（single-flight）
+            if (state.probedAt > 0 && now - state.probedAt < PROBE_TTL_MS) {
+                sessionState = state
+                return@withLock orderCandidates(state, isRaw)
+            }
+            DebugLog.i("Download", "[v2] 会话首次探测全部镜像（Range 0-0，轻量）…")
+            onStage?.invoke("正在探测镜像源…")
+            val results =
+                withContext(Dispatchers.IO) {
+                    coroutineScope {
+                        mirrors.map { m -> async { m to probeLatency(m.prefix + url) } }.awaitAll()
+                    }
+                }
+            var updated = state.copy(probedAt = now)
+            // 探测 URL 的通道决定本轮记录哪个可达性位（§6.5：release/raw 分别记录）
+            results.forEach { (m, r) ->
+                val prev = updated.mirrors[m.id] ?: MirrorStateEntry()
+                updated =
+                    updated.copy(
+                        mirrors =
+                            updated.mirrors +
+                                (
+                                    m.id to
+                                        MirrorStateEntry(
+                                            latencyMs = r.latencyMs,
+                                            lastOkAt = if (r.ok) now else prev.lastOkAt,
+                                            fails = if (r.ok) 0 else prev.fails,
+                                            ewmaBps = prev.ewmaBps,
+                                            rawOk = prev.rawOk || (r.ok && isRaw),
+                                            releaseOk = prev.releaseOk || (r.ok && !isRaw),
+                                        )
+                                ),
+                    )
+            }
             sessionState = updated
             stateStore.save(updated)
+            orderCandidates(updated, isRaw)
         }
-        return orderCandidates(updated, isRaw)
-    }
 
     /** 候选排序：曾成功优先、延迟升序；连续失败 ≥3 会话内降级；raw 通道偏好 rawOk、release 通道偏好 releaseOk（§6.5 双可达性位） */
     private fun orderCandidates(
