@@ -1,6 +1,11 @@
 package me.spica27.spicamusic.store
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -209,18 +214,26 @@ class ApkVisionUnlistedSearchSource(
         indexedPackages: Set<String>,
     ): List<UnlistedApp> =
         withContext(Dispatchers.IO) {
+            currentCoroutineContext().ensureActive() // 重打关键词会取消旧搜索：尽早停止
             val q = query.trim()
             if (q.length < ApkVisionHtml.MIN_QUERY) return@withContext emptyList()
             val html = fetch(ApkVisionHtml.searchUrl(q)) ?: return@withContext emptyList()
             val cards = ApkVisionHtml.parseCards(html).take(maxDetails)
-            val out = ArrayList<UnlistedApp>()
-            for (card in cards) {
-                val pkg = fetch(card.url)?.let { ApkVisionHtml.parsePackageName(it) } ?: ""
-                // 取不到包名无法判定收录状态 → 丢弃（避免源被拦截时输出整屏假结果）
-                if (pkg.isBlank() || !ApkVisionHtml.isUnlisted(pkg, indexedPackages)) continue
-                out.add(UnlistedApp(card.url, card.name, pkg, card.version, card.iconUrl))
+            coroutineScope {
+                cards
+                    .map { card ->
+                        async(Dispatchers.IO) {
+                            val pkg = fetch(card.url)?.let { ApkVisionHtml.parsePackageName(it) } ?: ""
+                            // 取不到包名无法判定收录状态 → 丢弃（避免源被拦截时输出整屏假结果）
+                            if (pkg.isBlank() || !ApkVisionHtml.isUnlisted(pkg, indexedPackages)) {
+                                null
+                            } else {
+                                UnlistedApp(card.url, card.name, pkg, card.version, card.iconUrl)
+                            }
+                        }
+                    }.awaitAll()
+                    .filterNotNull()
             }
-            out
         }
 
     private fun fetch(url: String): String? =
@@ -239,7 +252,13 @@ class ApkVisionUnlistedSearchSource(
                     DebugLog.w("UnlistedSearch", "APKVision HTTP ${r.code}")
                     null
                 } else {
-                    r.body.string()
+                    val len = r.body.contentLength()
+                    if (len > 2_000_000) {
+                        DebugLog.w("UnlistedSearch", "响应体过大($len) 放弃：$url")
+                        null
+                    } else {
+                        r.body.string()
+                    }
                 }
             }
         } catch (e: Exception) {
