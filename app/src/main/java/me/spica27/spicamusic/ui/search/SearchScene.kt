@@ -38,7 +38,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -127,9 +126,9 @@ class SearchScene : StackScene() {
                 unlistedLoading = false
                 return@LaunchedEffect
             }
-            delay(600) // 去抖：避免输入过程频繁请求，打爆 GitHub Search 未认证限额
+            delay(600) // 去抖：搜索会触发包详情页取包名，避免输入过程频繁抓取
             unlistedLoading = true
-            val exclude = apps.values.map { it.repo }.toSet()
+            val exclude = apps.values.mapNotNull { it.packageName.takeIf { p -> p.isNotBlank() } }.toSet()
             unlisted = unlistedSource.search(keyword.trim(), exclude)
             unlistedLoading = false
         }
@@ -400,18 +399,18 @@ private fun UnlistedResultList(items: List<UnlistedApp>) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
             Text(
-                text = "以下仓库尚未收录，结果来自 GitHub 搜索",
+                text = "以下应用尚未收录，结果来自 APKVision 采集源",
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
             )
         }
-        items(items, key = { it.fullName }) { app ->
+        items(items, key = { it.detailUrl }) { app ->
             UnlistedRow(
                 app = app,
                 onClick = {
                     runCatching {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.htmlUrl)))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.detailUrl)))
                     }
                 },
             )
@@ -438,32 +437,26 @@ private fun UnlistedRow(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            if (app.description.isNotBlank()) {
+            if (app.packageName.isNotBlank()) {
                 Text(
-                    text = app.description,
+                    text = app.packageName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    maxLines = 1,
                 )
             }
-            Text(
-                text = app.fullName + (app.language?.let { " · $it" } ?: ""),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            )
+            val sub =
+                listOfNotNull(
+                    app.version.takeIf { it.isNotBlank() },
+                    app.source.takeIf { it.isNotBlank() },
+                ).joinToString(" · ")
+            if (sub.isNotBlank()) {
+                Text(
+                    text = sub,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                )
+            }
         }
-        Spacer(modifier = Modifier.size(8.dp))
-        Icon(
-            imageVector = Icons.Filled.Star,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(14.dp),
-        )
-        Spacer(modifier = Modifier.size(4.dp))
-        Text(
-            text = app.stars.toString(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }

@@ -2,9 +2,9 @@ package me.spica27.spicamusic.di
 
 import me.spica27.spicamusic.BuildConfig
 import me.spica27.spicamusic.core.preferences.PreferencesManager
+import me.spica27.spicamusic.store.ApkVisionUnlistedSearchSource
 import me.spica27.spicamusic.store.BundleLoader
 import me.spica27.spicamusic.store.Downloader
-import me.spica27.spicamusic.store.GitHubUnlistedSearchSource
 import me.spica27.spicamusic.store.ManifestSyncEngine
 import me.spica27.spicamusic.store.SelfUpdater
 import me.spica27.spicamusic.store.SelfUpdaterImpl
@@ -57,8 +57,8 @@ object AppModule {
             // 详情包懒加载（bundle 下载 + 解包 + detail 合并）
             single<BundleLoader> { BundleLoader(get(), get()) }
 
-            // 未收录应用搜索（GitHub Search API；零 API 设计的唯一例外，按需触发）
-            single<UnlistedSearchSource> { GitHubUnlistedSearchSource(OkHttpClient()) }
+            // 未收录应用搜索（APKVision，移植承载仓库 WF8 采集算法；按 packageName 对照本地索引判未收录）
+            single<UnlistedSearchSource> { ApkVisionUnlistedSearchSource(OkHttpClient()) }
 
             // 客户端自身更新（独立于商店收录；GitLink 直链 patch.json 判定版本）
             single<SelfUpdater> {
