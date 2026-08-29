@@ -15,7 +15,7 @@ class ApkVisionHtmlTest {
         val url = ApkVisionHtml.searchUrl("hello world")
         assertTrue(url, url.startsWith("https://apkvision.org/?s="))
         assertTrue(url, url.contains("hello") && url.contains("world"))
-        assertEquals("https://apkvision.org/?s=foo/page/2/", ApkVisionHtml.searchUrl("foo", page = 2))
+        assertEquals("https://apkvision.org/?s=foo&paged=2", ApkVisionHtml.searchUrl("foo", page = 2))
     }
 
     @Test

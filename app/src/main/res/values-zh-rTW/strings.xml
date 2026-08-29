@@ -655,7 +655,7 @@
   <string name="privacy_title">隱私政策</string>
   <string name="privacy_updated_format">最後更新：%1$s</string>
   <string name="privacy_updated_value">2026 年 6 月</string>
-  <string name="privacy_intro">Only 尊重你的隱私。本應用被設計為完全在你的裝置上執行。本政策說明應用會存取哪些資料以及如何使用。</string>
+  <string name="privacy_intro">Only 尊重你的隱私。本應用不要求帳號、不收集個人身分資訊；使用時會聯網從 GitHub 獲取應用目錄、詳情與更新，並在你主動使用「搜尋未收錄應用」時，將你輸入的關鍵字傳送到 APK 採集來源（APKVision）以獲取結果。本政策說明應用會存取哪些資料以及如何使用。</string>
   <string name="privacy_section_data_title">我們存取的資料</string>
   <string name="privacy_section_data_body">• 你裝置上的音訊檔案與媒體中繼資料，僅用於在本機掃描和播放你的音樂庫。\n• 播放紀錄、收藏、播放清單與設定，僅儲存在應用本機資料庫與偏好設定中。\n本應用無需帳號，也不收集個人身分識別。</string>
   <string name="privacy_section_network_title">網路使用</string>

@@ -42,13 +42,13 @@ object ApkVisionHtml {
     const val ORIGIN = "https://apkvision.org"
     const val MIN_QUERY = 2 // 源脚本强制搜索词 ≥2 字符
 
-    /** 搜索 URL：https://apkvision.org/?s=<q>（翻页追加 /page/N/）。 */
+    /** 搜索 URL：https://apkvision.org/?s=<q>（WordPress 搜索，翻页用 &paged=N）。 */
     fun searchUrl(
         query: String,
         page: Int = 1,
     ): String {
-        val suffix = if (page > 1) "/page/$page/" else ""
-        return "$ORIGIN/?s=${URLEncoder.encode(query.trim(), "UTF-8")}$suffix"
+        val q = URLEncoder.encode(query.trim(), "UTF-8")
+        return if (page > 1) "$ORIGIN/?s=$q&paged=$page" else "$ORIGIN/?s=$q"
     }
 
     private fun denode(s: String): String =
@@ -216,7 +216,8 @@ class ApkVisionUnlistedSearchSource(
             val out = ArrayList<UnlistedApp>()
             for (card in cards) {
                 val pkg = fetch(card.url)?.let { ApkVisionHtml.parsePackageName(it) } ?: ""
-                if (!ApkVisionHtml.isUnlisted(pkg, indexedPackages)) continue
+                // 取不到包名无法判定收录状态 → 丢弃（避免源被拦截时输出整屏假结果）
+                if (pkg.isBlank() || !ApkVisionHtml.isUnlisted(pkg, indexedPackages)) continue
                 out.add(UnlistedApp(card.url, card.name, pkg, card.version, card.iconUrl))
             }
             out

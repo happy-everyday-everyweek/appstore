@@ -675,7 +675,7 @@
   <string name="privacy_title">Privacy policy</string>
   <string name="privacy_updated_format">Last updated: %1$s</string>
   <string name="privacy_updated_value">June 2026</string>
-  <string name="privacy_intro">Only respects your privacy. This app is designed to work entirely on your device. This policy explains what data the app accesses and how it is used.</string>
+  <string name="privacy_intro">Only respects your privacy. The app requires no account and collects no personal data. It connects to GitHub to fetch the app catalog, details and updates while you use it, and when you actively use "Search unlisted apps" it sends your query keyword to an APK source (APKVision) to retrieve results. This policy explains what data the app accesses and how it is used.</string>
   <string name="privacy_section_data_title">Data we access</string>
   <string name="privacy_section_data_body">• Audio files and media metadata on your device, used solely to scan and play your music library locally.\n• Playback history, favorites, playlists, and settings, stored only in the app’s local database and preferences on your device.\nThe app does not require an account and does not collect personal identifiers.</string>
   <string name="privacy_section_network_title">Network usage</string>

@@ -115,7 +115,7 @@ class SearchScene : StackScene() {
                 }
             }
 
-        // 未收录应用搜索：本地无匹配结果时，去抖后查 GitHub（排除已收录仓库）
+        // 未收录应用搜索：本地无匹配结果时，去抖后查 APKVision 采集源（按 packageName 排除已收录）
         val unlistedSource: UnlistedSearchSource = koinInject()
         var unlisted by remember { mutableStateOf<List<UnlistedApp>>(emptyList()) }
         var unlistedLoading by remember { mutableStateOf(false) }
@@ -172,10 +172,20 @@ class SearchScene : StackScene() {
                 when (s) {
                     SearchState.Idle -> SearchIdleHint()
                     SearchState.NoResult ->
-                        if (unlisted.isNotEmpty()) {
-                            UnlistedResultList(unlisted)
-                        } else {
-                            SearchNoResultHint()
+                        when {
+                            unlisted.isNotEmpty() -> UnlistedResultList(unlisted)
+                            unlistedLoading ->
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = "正在搜索未收录应用…",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            else -> SearchNoResultHint()
                         }
                     SearchState.Result ->
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
@@ -389,8 +399,8 @@ private fun SearchNoResultHint() {
 }
 
 /**
- * 未收录应用结果列表（本地无匹配时展示，来自 GitHub Search）。
- * 每项点击跳转该仓库 GitHub 页面；星标数与语言作为轻量可用性信号
+ * 未收录应用结果列表（本地无匹配时展示，来自 APKVision 采集源）。
+ * 每项点击跳转该应用的 APKVision 详情页；版本与来源作为轻量信息信号
  * （完整收录核验见承载仓库 verify_scan 工作流）。
  */
 @Composable

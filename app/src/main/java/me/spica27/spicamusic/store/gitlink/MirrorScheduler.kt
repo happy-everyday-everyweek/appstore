@@ -325,6 +325,7 @@ class MirrorScheduler(
                 val finished = CompletableDeferred<StreamResult>()
                 val pending = AtomicInteger(sources.size)
                 val saw404 = AtomicBoolean(false)
+                val sawNon404 = AtomicBoolean(false)
                 val sawRestartRequired = AtomicBoolean(false)
                 val failed = Collections.synchronizedSet(mutableSetOf<Mirror>())
                 val calls = Collections.synchronizedList(mutableListOf<Call>())
@@ -363,12 +364,13 @@ class MirrorScheduler(
                                     call.cancel()
                                 }
                             } catch (e: SourceException) {
-                                if (e.code == 404) saw404.set(true)
+                                if (e.code == 404) saw404.set(true) else sawNon404.set(true)
                                 if (e.restartRequired) sawRestartRequired.set(true)
                                 failed.add(mirror)
                                 // 源级失败（404 / HTML / Range 忽略 / 无数据 / 首字节超时）
                             } catch (e: Exception) {
-                                // 竞速败者连接被取消（IOException "Canceled"）或其它 IO 错误，忽略
+                                // 竞速败者连接被取消（IOException "Canceled"）或其它 IO 错误
+                                sawNon404.set(true)
                             } finally {
                                 conn?.close()
                             }
@@ -384,7 +386,7 @@ class MirrorScheduler(
                         finished.complete(
                             StreamResult.Aborted(
                                 reason = "所有候选源首字节均失败",
-                                code = if (saw404.get()) 404 else null,
+                                code = if (saw404.get() && !sawNon404.get()) 404 else null,
                                 restartRequired = sawRestartRequired.get(),
                             ),
                         )

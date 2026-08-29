@@ -95,7 +95,7 @@ class ManifestSyncEngine(
             if (snapshot?.releaseTag != manifest.releaseTag) {
                 store.writeManifestSnapshot(manifestText)
             }
-            store.writeVersion(channel, manifest.releaseTag)
+            if (manifest.releaseTag.isNotBlank()) store.writeVersion(channel, manifest.releaseTag)
             DebugLog.i("Sync", "[v2] ${channel.name} 无更新（index 一致、图标齐全）")
             return SyncResult(changed = false, applied = PackageKind.None, usedV2 = true)
         }
@@ -137,7 +137,7 @@ class ManifestSyncEngine(
 
         // 4. 原子提交快照（对比基准 = 本次成功同步的清单）
         store.writeManifestSnapshot(manifestText)
-        store.writeVersion(channel, manifest.releaseTag)
+        if (manifest.releaseTag.isNotBlank()) store.writeVersion(channel, manifest.releaseTag)
         return SyncResult(changed = true, applied = PackageKind.Manifest, usedV2 = true)
     }
 

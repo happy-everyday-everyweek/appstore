@@ -325,13 +325,13 @@ fun DetailScreen(app: AppMeta) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 介绍（README）：v2 重构后优先用随索引内联的 app.readme（常载、免等待）；
-            // 内联为空时回落旧路径——v1 读随包资产 / v2 读解包的 bundle README
+            // 介绍（README）：优先用随索引常载的正文 app.readmeText（v2 内联，免懒加载）；
+            // 为空时回落旧路径——v1 随包资产 / v2 解包 bundle 的 README（readme 字段是路径语义）
             SectionCard(title = stringResource(R.string.detail_readme)) {
                 val readmeText =
-                    remember(app.readme, display.readme, bundle?.meta) {
+                    remember(app.readmeText, display.readme, bundle?.meta) {
                         when {
-                            app.readme.isNotBlank() -> app.readme
+                            app.readmeText.isNotBlank() -> app.readmeText
                             display.readme.isBlank() -> null
                             else ->
                                 me.spica27.spicamusic.store.StoreAssets

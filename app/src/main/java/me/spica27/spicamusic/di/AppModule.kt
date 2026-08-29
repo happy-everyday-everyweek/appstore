@@ -58,7 +58,17 @@ object AppModule {
             single<BundleLoader> { BundleLoader(get(), get()) }
 
             // 未收录应用搜索（APKVision，移植承载仓库 WF8 采集算法；按 packageName 对照本地索引判未收录）
-            single<UnlistedSearchSource> { ApkVisionUnlistedSearchSource(OkHttpClient()) }
+            // 独立 client + 超时：搜索串行抓取多详情页，须有整体调用超时兜底
+            single<UnlistedSearchSource> {
+                val searchClient =
+                    OkHttpClient
+                        .Builder()
+                        .connectTimeout(java.time.Duration.ofSeconds(8))
+                        .readTimeout(java.time.Duration.ofSeconds(10))
+                        .callTimeout(java.time.Duration.ofSeconds(20))
+                        .build()
+                ApkVisionUnlistedSearchSource(searchClient)
+            }
 
             // 客户端自身更新（独立于商店收录；GitLink 直链 patch.json 判定版本）
             single<SelfUpdater> {
