@@ -180,7 +180,7 @@ class SearchScene : StackScene() {
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Text(
-                                        text = "正在搜索未收录应用…",
+                                        text = stringResource(R.string.search_unlisted_loading),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -409,7 +409,7 @@ private fun UnlistedResultList(items: List<UnlistedApp>) {
     LazyColumn(modifier = Modifier.fillMaxSize()) {
         item {
             Text(
-                text = "以下应用尚未收录，结果来自 APKVision 采集源",
+                text = stringResource(R.string.search_unlisted_header),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),

@@ -729,4 +729,6 @@
   <string name="added_to_playlists_count_format">已添加到 %1$d 个歌单</string>
   <string name="album_no_playlists_hint">还没有歌单，可在下方直接新建</string>
   <string name="album_picker_select_hint">先在上方勾选歌单</string>
+  <string name="search_unlisted_loading">正在搜索未收录应用…</string>
+  <string name="search_unlisted_header">以下应用尚未收录，结果来自 APKVision 采集源</string>
 </resources>

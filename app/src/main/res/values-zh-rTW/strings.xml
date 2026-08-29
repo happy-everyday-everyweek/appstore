@@ -728,4 +728,6 @@
   <string name="added_to_playlists_count_format">已加入 %1$d 個播放清單</string>
   <string name="album_no_playlists_hint">還沒有播放清單，可在下方直接新增</string>
   <string name="album_picker_select_hint">先在上方勾選播放清單</string>
+  <string name="search_unlisted_loading">正在搜尋未收錄應用…</string>
+  <string name="search_unlisted_header">以下應用尚未收錄，結果來自 APKVision 採集來源</string>
 </resources>

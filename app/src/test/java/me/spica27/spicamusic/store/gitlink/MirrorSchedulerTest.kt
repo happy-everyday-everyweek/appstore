@@ -1,5 +1,9 @@
 package me.spica27.spicamusic.store.gitlink
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.After
@@ -160,6 +164,30 @@ class MirrorSchedulerTest {
         runBlocking { s.download("dist/app/index.v2.json", tmp.newFile().apply { delete() }, null, {}, false) }
         val probesAfterSecond = a.probeCount.get() + b.probeCount.get()
         assertEquals("第二次下载命中 TTL 缓存，探测不再发生（验收3：每会话≤1轮）", probesAfterFirst, probesAfterSecond)
+    }
+
+    @Test
+    fun `并发下载只触发一轮全量探测 single-flight`() {
+        val body = ByteArray(32 * 1024) { 'Z'.code.toByte() }
+        val a = rangeServer(body)
+        val b = rangeServer(body)
+        val s = freshScheduler(mirror("a", a.prefix), mirror("b", b.prefix))
+        val dests = List(4) { tmp.newFile().apply { delete() } }
+        runBlocking {
+            coroutineScope {
+                dests
+                    .map { d ->
+                        async(Dispatchers.IO) {
+                            runCatching { s.download("dist/app/index.v2.json", d, null, {}, false) }
+                        }
+                    }.awaitAll()
+            }
+        }
+        val total = a.probeCount.get() + b.probeCount.get()
+        assertTrue(
+            "并发首下应共享一轮探测（每镜像各1次=2），实际 $total——single-flight 可能失效",
+            total == 2,
+        )
     }
 
     /** 一律返回指定错误码的源（默认 404）。 */

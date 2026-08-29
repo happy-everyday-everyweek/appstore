@@ -748,4 +748,6 @@
   <string name="added_to_playlists_count_format">Added to %1$d playlists</string>
   <string name="album_no_playlists_hint">No playlists yet — create one below.</string>
   <string name="album_picker_select_hint">Select playlists above</string>
+  <string name="search_unlisted_loading">Searching unlisted apps…</string>
+  <string name="search_unlisted_header">These apps are not in the catalog yet — results from the APKVision source</string>
 </resources>
