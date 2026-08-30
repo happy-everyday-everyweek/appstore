@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="app_name">应用市场</string>
+  <string name="app_name">Only</string>
   <string name="action_settings">Settings</string>
   <string name="first_fragment_label">First Fragment</string>
   <string name="second_fragment_label">Second Fragment</string>
@@ -629,10 +629,10 @@
   <string name="settings_about">关于</string>
   <string name="settings_about_subtitle">版本、开源声明与隐私</string>
   <string name="about_title">关于</string>
-  <string name="about_app_tagline">基于 Jetpack Compose 与 Media3 打造的现代化本地音乐播放器</string>
+  <string name="about_app_tagline">以 GitHub 为唯一分发源的开源 Android 应用市场</string>
   <string name="about_version_format">版本 %1$s</string>
   <string name="about_section_intro">项目简介</string>
-  <string name="about_intro_body">本质是个compose的练手项目，更新节奏和功能开发随缘。\n\n项目会保持免费不会做任何的收费功能；</string>
+  <string name="about_intro_body">Only 是一个以 GitHub 为唯一分发源的开源 Android 应用市场。应用收录、元数据采集、评级与分发全部由 GitHub 工作流自动完成；APK 始终来自开发者自己的 Release，来源可追溯。</string>
   <string name="about_section_more">更多</string>
   <string name="about_open_source">开源许可证</string>
   <string name="about_open_source_subtitle">本应用使用的第三方库</string>
@@ -656,7 +656,7 @@
   <string name="privacy_title">隐私政策</string>
   <string name="privacy_updated_format">最后更新：%1$s</string>
   <string name="privacy_updated_value">2026 年 6 月</string>
-  <string name="privacy_intro">柠檬音乐尊重你的隐私。本应用被设计为完全在你的设备上运行。本政策说明应用会访问哪些数据以及如何使用。</string>
+  <string name="privacy_intro">Only 尊重你的隐私。本应用不要求账号、不收集个人身份信息；使用时会联网从 GitHub 获取应用目录、详情与更新，并在你主动使用「搜索未收录应用」时，将你输入的关键词发送到 APK 采集源（APKVision）以获取结果。本政策说明应用会访问哪些数据以及如何使用。</string>
   <string name="privacy_section_data_title">我们访问的数据</string>
   <string name="privacy_section_data_body">• 你设备上的音频文件与媒体元数据，仅用于在本地扫描和播放你的音乐库。\n• 播放历史、收藏、歌单与设置，仅存储在应用本地数据库与偏好设置中。\n本应用无需账号，也不收集个人身份标识。</string>
   <string name="privacy_section_network_title">网络使用</string>
@@ -729,4 +729,6 @@
   <string name="added_to_playlists_count_format">已添加到 %1$d 个歌单</string>
   <string name="album_no_playlists_hint">还没有歌单，可在下方直接新建</string>
   <string name="album_picker_select_hint">先在上方勾选歌单</string>
+  <string name="search_unlisted_loading">正在搜索未收录应用…</string>
+  <string name="search_unlisted_header">以下应用尚未收录，结果来自 APKVision 采集源</string>
 </resources>

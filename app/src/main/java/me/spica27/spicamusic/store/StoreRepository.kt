@@ -88,7 +88,11 @@ class StoreRepository(
         val v2Result = v2Engine.sync()
         if (v2Result.usedV2) return v2Result
         DebugLog.i("Sync", "[v2] AppIndex 无 manifest.v2.json，回退 v1 引擎")
-        return v1Engine.sync(SyncChannel.AppIndex, mode)
+        val v1Result = v1Engine.sync(SyncChannel.AppIndex, mode)
+        // 对方确已回到 v1 形态：v1 同步成功后必须失效本地 v2 快照，
+        // 否则 reloadFromCache 仍优先读过期 index.v2.json，新拉的 v1 列表被无视且零报错
+        if (v1Result.error == null) store.clearIndexV2()
+        return v1Result
     }
 
     /** 首次使用/损坏兜底：前台全量 */

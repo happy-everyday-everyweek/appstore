@@ -325,16 +325,18 @@ fun DetailScreen(app: AppMeta) {
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 介绍（README）：v1 读随包资产 assets/readmes/<id>.md；v2 读解包的 bundle README
+            // 介绍（README）：优先用随索引常载的正文 app.readmeText（v2 内联，免懒加载）；
+            // 为空时回落旧路径——v1 随包资产 / v2 解包 bundle 的 README（readme 字段是路径语义）
             SectionCard(title = stringResource(R.string.detail_readme)) {
                 val readmeText =
-                    remember(display.readme, bundle?.meta) {
-                        if (display.readme.isBlank()) {
-                            null
-                        } else {
-                            me.spica27.spicamusic.store.StoreAssets
-                                .file(display.readme.removePrefix("assets/"))
-                                ?.readText()
+                    remember(app.readmeText, display.readme, bundle?.meta) {
+                        when {
+                            app.readmeText.isNotBlank() -> app.readmeText
+                            display.readme.isBlank() -> null
+                            else ->
+                                me.spica27.spicamusic.store.StoreAssets
+                                    .file(display.readme.removePrefix("assets/"))
+                                    ?.readText()
                         }
                     }
                 if (readmeText != null) {

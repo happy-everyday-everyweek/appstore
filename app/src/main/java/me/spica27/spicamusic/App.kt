@@ -16,7 +16,7 @@ import org.koin.core.context.GlobalContext.startKoin
 import timber.log.Timber
 
 /**
- * 应用市场客户端 Application
+ * Only 客户端 Application
  * 负责初始化 Koin 依赖注入与其他全局配置
  */
 class App : Application() {

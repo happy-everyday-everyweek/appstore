@@ -55,6 +55,8 @@ data class AppMeta(
     val specialPermissions: List<SpecialPermission> = emptyList(),
     val permissions: List<String> = emptyList(),
     val readme: String = "",
+    /** v2 常载 README 正文（index.v2.json 内联）；readme 仍为 v1/bundle 的资源路径语义 */
+    val readmeText: String = "",
     val grade: AppGrade = AppGrade.E,
     val version: AppVersion = AppVersion(),
     val license: String? = null,

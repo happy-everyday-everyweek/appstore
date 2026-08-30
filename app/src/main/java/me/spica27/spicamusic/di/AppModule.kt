@@ -2,6 +2,7 @@ package me.spica27.spicamusic.di
 
 import me.spica27.spicamusic.BuildConfig
 import me.spica27.spicamusic.core.preferences.PreferencesManager
+import me.spica27.spicamusic.store.ApkVisionUnlistedSearchSource
 import me.spica27.spicamusic.store.BundleLoader
 import me.spica27.spicamusic.store.Downloader
 import me.spica27.spicamusic.store.ManifestSyncEngine
@@ -10,6 +11,7 @@ import me.spica27.spicamusic.store.SelfUpdaterImpl
 import me.spica27.spicamusic.store.StoreRepository
 import me.spica27.spicamusic.store.SyncEngine
 import me.spica27.spicamusic.store.SyncStore
+import me.spica27.spicamusic.store.UnlistedSearchSource
 import me.spica27.spicamusic.store.gitlink.GitLinkDownloader
 import me.spica27.spicamusic.store.gitlink.MirrorScheduler
 import me.spica27.spicamusic.store.gitlink.MirrorStateStore
@@ -54,6 +56,19 @@ object AppModule {
 
             // 详情包懒加载（bundle 下载 + 解包 + detail 合并）
             single<BundleLoader> { BundleLoader(get(), get()) }
+
+            // 未收录应用搜索（APKVision，移植承载仓库 WF8 采集算法；按 packageName 对照本地索引判未收录）
+            // 独立 client + 超时：搜索串行抓取多详情页，须有整体调用超时兜底
+            single<UnlistedSearchSource> {
+                val searchClient =
+                    OkHttpClient
+                        .Builder()
+                        .connectTimeout(java.time.Duration.ofSeconds(8))
+                        .readTimeout(java.time.Duration.ofSeconds(10))
+                        .callTimeout(java.time.Duration.ofSeconds(20))
+                        .build()
+                ApkVisionUnlistedSearchSource(searchClient)
+            }
 
             // 客户端自身更新（独立于商店收录；GitLink 直链 patch.json 判定版本）
             single<SelfUpdater> {

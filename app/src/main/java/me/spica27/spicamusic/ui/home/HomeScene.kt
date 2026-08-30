@@ -39,7 +39,7 @@ import me.spica27.spicamusic.ui.home.player_bar.rememberBottomBarScrollConnectio
 import org.koin.compose.viewmodel.koinActivityViewModel
 
 /**
- * 应用市场主框架（基于上游生产版恢复后修改）：
+ * Only 主框架（基于上游生产版恢复后修改）：
  * 底栏为原版展开态胶囊（Tab 指示器动画 + 搜索按钮），
  * 页面内容由全屏槽位承载（推荐 / 全部 / 设置）。
  */
@@ -199,7 +199,7 @@ private fun InitSyncLayer(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "应用市场",
+                text = "Only",
                 style = MaterialTheme.typography.headlineMedium,
                 color = MaterialTheme.colorScheme.primary,
             )

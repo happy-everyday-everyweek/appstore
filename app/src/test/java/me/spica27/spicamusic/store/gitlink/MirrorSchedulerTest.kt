@@ -1,5 +1,9 @@
 package me.spica27.spicamusic.store.gitlink
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import org.junit.After
@@ -161,6 +165,98 @@ class MirrorSchedulerTest {
         val probesAfterSecond = a.probeCount.get() + b.probeCount.get()
         assertEquals("第二次下载命中 TTL 缓存，探测不再发生（验收3：每会话≤1轮）", probesAfterFirst, probesAfterSecond)
     }
+
+    @Test
+    fun `并发下载只触发一轮全量探测 single-flight`() {
+        val body = ByteArray(32 * 1024) { 'Z'.code.toByte() }
+        val a = rangeServer(body)
+        val b = rangeServer(body)
+        val s = freshScheduler(mirror("a", a.prefix), mirror("b", b.prefix))
+        val dests = List(4) { tmp.newFile().apply { delete() } }
+        runBlocking {
+            coroutineScope {
+                dests
+                    .map { d ->
+                        async(Dispatchers.IO) {
+                            runCatching { s.download("dist/app/index.v2.json", d, null, {}, false) }
+                        }
+                    }.awaitAll()
+            }
+        }
+        val total = a.probeCount.get() + b.probeCount.get()
+        assertTrue(
+            "并发首下应共享一轮探测（每镜像各1次=2），实际 $total——single-flight 可能失效",
+            total == 2,
+        )
+    }
+
+    /** 一律返回指定错误码的源（默认 404）。 */
+    private fun serverError(status: Int = 404): Source {
+        val counter = AtomicInteger()
+        val probeCounter = AtomicInteger()
+        val s = MiniHttpServer(ByteArray(0), failStatus = status, counter = counter, probeCounter = probeCounter)
+        servers.add(s)
+        return Source("http://127.0.0.1:${s.port}/", counter, probeCounter)
+    }
+
+    /** 收到带偏移的 Range 请求仍回 200 全量（模拟源不支持 Range 续传）。 */
+    private fun ignoreRangeServer(body: ByteArray): Source {
+        val counter = AtomicInteger()
+        val probeCounter = AtomicInteger()
+        val s = MiniHttpServer(body, ignoreRange = true, counter = counter, probeCounter = probeCounter)
+        servers.add(s)
+        return Source("http://127.0.0.1:${s.port}/", counter, probeCounter)
+    }
+
+    @Test
+    fun `全部候选源404时抛MirrorNotFound`() {
+        val a = serverError(404)
+        val b = serverError(404)
+        val s = scheduler(mirror("a", a.prefix), mirror("b", b.prefix))
+        val dest = tmp.newFile().apply { delete() }
+        var thrown: Throwable? = null
+        try {
+            runBlocking { s.download("dist/app/index.v2.json", dest, null, {}, false) }
+        } catch (e: Throwable) {
+            thrown = e
+        }
+        assertTrue("全部候选 404 应判为资产不存在 MirrorNotFound，实际 $thrown", thrown is MirrorNotFound)
+    }
+
+    @Test
+    fun `混合404与非404失败不误判为资产不存在`() {
+        val a = serverError(404)
+        val b = serverError(500) // 非 404 的服务端错误：资产可能存在，只是取不到
+        val s = scheduler(mirror("a", a.prefix), mirror("b", b.prefix))
+        val dest = tmp.newFile().apply { delete() }
+        var thrown: Throwable? = null
+        try {
+            runBlocking { s.download("dist/app/index.v2.json", dest, null, {}, false) }
+        } catch (e: Throwable) {
+            thrown = e
+        }
+        assertTrue(
+            "存在非 404 失败时不得判为 MirrorNotFound，避免误清健康 v2 缓存；实际 $thrown",
+            thrown != null && thrown !is MirrorNotFound,
+        )
+    }
+
+    @Test
+    fun `源忽略Range时清空半成品从头重下`() {
+        val body = ByteArray(64 * 1024) { 'R'.code.toByte() }
+        val a = ignoreRangeServer(body)
+        val s = scheduler(mirror("a", a.prefix))
+        val dest = tmp.newFile()
+        dest.writeBytes(ByteArray(10)) // 预置 10B 半成品 → resumeFrom>0
+        var thrown: Throwable? = null
+        try {
+            runBlocking { s.download("dist/app/index.v2.json", dest, null, {}, false) }
+        } catch (e: Throwable) {
+            thrown = e
+        }
+        assertTrue("单源且忽略 Range 最终应失败抛出，实际 $thrown", thrown != null)
+        assertTrue("restartRequired 必须删除错误偏移的半成品 dest", !dest.exists() || dest.length() == 0L)
+    }
 }
 
 /**
@@ -176,6 +272,8 @@ private class MiniHttpServer(
     private val body: ByteArray,
     private val firstByteDelayMs: Long = 0,
     private val trickleMs: Long = 0,
+    private val failStatus: Int = 0,
+    private val ignoreRange: Boolean = false,
     private val counter: AtomicInteger,
     private val probeCounter: AtomicInteger,
 ) {
@@ -223,7 +321,13 @@ private class MiniHttpServer(
                 if (rangeValue == "bytes=0-0") probeCounter.incrementAndGet()
                 val from = rangeLine?.let { parseRangeFrom(it) }
 
-                if (trickleMs > 0 && from == null) {
+                if (failStatus != 0) {
+                    writeHead(output, "$failStatus Error", "Content-Length: 0")
+                    return
+                }
+                val effFrom = if (ignoreRange) null else from
+
+                if (trickleMs > 0 && effFrom == null) {
                     // trickle：立即回 200，逐字节慢吐
                     writeHead(output, "200 OK", "Content-Type: application/octet-stream\r\nContent-Length: ${body.size}")
                     var i = 0
@@ -236,14 +340,14 @@ private class MiniHttpServer(
                     return
                 }
                 if (firstByteDelayMs > 0) Thread.sleep(firstByteDelayMs)
-                if (from != null) {
-                    val len = body.size - from
+                if (effFrom != null) {
+                    val len = body.size - effFrom
                     writeHead(
                         output,
                         "206 Partial Content",
-                        "Content-Range: bytes $from-${body.size - 1}/${body.size}\r\nContent-Length: $len",
+                        "Content-Range: bytes $effFrom-${body.size - 1}/${body.size}\r\nContent-Length: $len",
                     )
-                    output.write(body, from, len)
+                    output.write(body, effFrom, len)
                     output.flush()
                 } else {
                     writeHead(output, "200 OK", "Content-Type: application/octet-stream\r\nContent-Length: ${body.size}")

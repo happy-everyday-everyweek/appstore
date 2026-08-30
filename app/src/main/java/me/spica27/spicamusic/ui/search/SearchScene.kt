@@ -1,5 +1,7 @@
 package me.spica27.spicamusic.ui.search
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -12,6 +14,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,6 +54,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -58,13 +62,17 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import me.spica27.navkit.path.LocalNavigationPath
 import me.spica27.navkit.scene.StackScene
 import me.spica27.spicamusic.R
 import me.spica27.spicamusic.common.entity.appstore.AppMeta
+import me.spica27.spicamusic.store.UnlistedApp
+import me.spica27.spicamusic.store.UnlistedSearchSource
 import me.spica27.spicamusic.ui.components.AppRow
 import me.spica27.spicamusic.ui.detail.DetailScene
 import me.spica27.spicamusic.ui.home.StoreViewModel
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinActivityViewModel
 
 /**
@@ -107,6 +115,24 @@ class SearchScene : StackScene() {
                 }
             }
 
+        // 未收录应用搜索：本地无匹配结果时，去抖后查 APKVision 采集源（按 packageName 排除已收录）
+        val unlistedSource: UnlistedSearchSource = koinInject()
+        var unlisted by remember { mutableStateOf<List<UnlistedApp>>(emptyList()) }
+        var unlistedLoading by remember { mutableStateOf(false) }
+        val noLocal = results.isEmpty() && keyword.isNotBlank()
+        LaunchedEffect(keyword, noLocal) {
+            if (!noLocal) {
+                unlisted = emptyList()
+                unlistedLoading = false
+                return@LaunchedEffect
+            }
+            delay(600) // 去抖：搜索会触发包详情页取包名，避免输入过程频繁抓取
+            unlistedLoading = true
+            val exclude = apps.values.mapNotNull { it.packageName.takeIf { p -> p.isNotBlank() } }.toSet()
+            unlisted = unlistedSource.search(keyword.trim(), exclude)
+            unlistedLoading = false
+        }
+
         // 全面屏适配：全屏搜索页避开状态栏与系统导航条；实色背景避免转场露出黑边
         Column(
             modifier =
@@ -145,7 +171,22 @@ class SearchScene : StackScene() {
             ) { s ->
                 when (s) {
                     SearchState.Idle -> SearchIdleHint()
-                    SearchState.NoResult -> SearchNoResultHint()
+                    SearchState.NoResult ->
+                        when {
+                            unlisted.isNotEmpty() -> UnlistedResultList(unlisted)
+                            unlistedLoading ->
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.search_unlisted_loading),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            else -> SearchNoResultHint()
+                        }
                     SearchState.Result ->
                         LazyColumn(modifier = Modifier.fillMaxSize()) {
                             items(results, key = { it.id }) { app ->
@@ -351,6 +392,79 @@ private fun SearchNoResultHint() {
                     text = stringResource(R.string.search_no_result_clear),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 未收录应用结果列表（本地无匹配时展示，来自 APKVision 采集源）。
+ * 每项点击跳转该应用的 APKVision 详情页；版本与来源作为轻量信息信号
+ * （完整收录核验见承载仓库 verify_scan 工作流）。
+ */
+@Composable
+private fun UnlistedResultList(items: List<UnlistedApp>) {
+    val context = LocalContext.current
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        item {
+            Text(
+                text = stringResource(R.string.search_unlisted_header),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+        }
+        items(items, key = { it.detailUrl }) { app ->
+            UnlistedRow(
+                app = app,
+                onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(app.detailUrl)))
+                    }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun UnlistedRow(
+    app: UnlistedApp,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = app.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (app.packageName.isNotBlank()) {
+                Text(
+                    text = app.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+            }
+            val sub =
+                listOfNotNull(
+                    app.version.takeIf { it.isNotBlank() },
+                    app.source.takeIf { it.isNotBlank() },
+                ).joinToString(" · ")
+            if (sub.isNotBlank()) {
+                Text(
+                    text = sub,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 )
             }
         }

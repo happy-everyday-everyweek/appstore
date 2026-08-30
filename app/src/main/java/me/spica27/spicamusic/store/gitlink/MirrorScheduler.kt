@@ -7,6 +7,8 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import me.spica27.spicamusic.store.DebugLog
@@ -70,6 +72,9 @@ class MirrorScheduler(
     @Volatile
     private var sessionState: MirrorStateSnapshot? = null
 
+    /** 串行化 sessionState 的读-改-写：@Volatile 只保证可见性，多路并发下载同时更新会互相覆盖 */
+    private val stateMutex = Mutex()
+
     /** 阶段回调用（供 UI 展示具体流程） */
     var onStage: ((String) -> Unit)? = null
 
@@ -110,7 +115,8 @@ class MirrorScheduler(
             }
         DebugLog.i("Download", "[v2] 候选源：${candidates.joinToString { it.name }}")
         var lastErr: Throwable = IOException("无可用镜像")
-        var saw404 = false
+        var notFound404 = 0
+        var otherFailures = 0
         var tried = 0
         var i = 0
         while (i < candidates.size && tried < MAX_ATTEMPTS) {
@@ -125,12 +131,14 @@ class MirrorScheduler(
                     is StreamResult.Completed -> {
                         if (dest.length() < 1) {
                             lastErr = IOException("下载文件为空（0B），疑似空响应")
+                            otherFailures++
                             recordFail(blamed)
                             dest.delete()
                             continue
                         }
                         if (expectedSha256 != null && sha256(dest) != expectedSha256) {
                             lastErr = IOException("SHA-256 不一致：期望 ${expectedSha256.take(8)}…")
+                            otherFailures++
                             recordFail(blamed)
                             dest.delete()
                             continue
@@ -141,7 +149,7 @@ class MirrorScheduler(
                         return dest
                     }
                     is StreamResult.Aborted -> {
-                        if (result.code == 404) saw404 = true
+                        if (result.code == 404) notFound404++ else otherFailures++
                         lastErr = IOException("镜像组失败：${result.reason}")
                         if (result.restartRequired) dest.delete()
                         // 竞速批内每个失败源独立累计（修复：不只记 blamed 首个，保证连续失败≥3 降级准确）
@@ -150,58 +158,66 @@ class MirrorScheduler(
                 }
             } catch (e: Exception) {
                 lastErr = e
+                otherFailures++
                 batch.forEach { recordFail(it) }
                 runCatching { dest.delete() }
             }
         }
         DebugLog.e("Download", "[v2] 全部候选源失败（尝试 $tried 个）：${lastErr.message}")
-        throw if (saw404) MirrorNotFound(url) else IOException("镜像全部失败（尝试 $tried 个）：${lastErr.message}", lastErr)
+        // 仅当所有失败都是 404 才判定资产不存在：MirrorNotFound 会被上层当作「对方仍为 v1 形态」的权威结论
+        throw if (tried > 0 && notFound404 > 0 && otherFailures == 0) {
+            MirrorNotFound(url)
+        } else {
+            IOException("镜像全部失败（尝试 $tried 个）：${lastErr.message}", lastErr)
+        }
     }
 
     /** 会话/持久化探测：TTL 内复用，否则并发轻探测一次并落盘 */
     private suspend fun ensureProbed(
         url: String,
         isRaw: Boolean,
-    ): List<Mirror> {
-        val now = System.currentTimeMillis()
-        val state = sessionState ?: stateStore.load()
-        if (state.probedAt > 0 && now - state.probedAt < PROBE_TTL_MS) {
-            sessionState = state
-            return orderCandidates(state, isRaw)
-        }
-        DebugLog.i("Download", "[v2] 会话首次探测全部镜像（Range 0-0，轻量）…")
-        onStage?.invoke("正在探测镜像源…")
-        val results =
-            withContext(Dispatchers.IO) {
-                coroutineScope {
-                    mirrors.map { m -> async { m to probeLatency(m.prefix + url) } }.awaitAll()
-                }
+    ): List<Mirror> =
+        stateMutex.withLock {
+            val now = System.currentTimeMillis()
+            val state = sessionState ?: stateStore.load()
+            // 锁内双检 TTL：命中即复用，保证并发只探一轮（single-flight）
+            if (state.probedAt > 0 && now - state.probedAt < PROBE_TTL_MS) {
+                sessionState = state
+                return@withLock orderCandidates(state, isRaw)
             }
-        var updated = state.copy(probedAt = now)
-        // 探测 URL 的通道决定本轮记录哪个可达性位（§6.5：release/raw 分别记录）
-        results.forEach { (m, r) ->
-            val prev = updated.mirrors[m.id] ?: MirrorStateEntry()
-            updated =
-                updated.copy(
-                    mirrors =
-                        updated.mirrors +
-                            (
-                                m.id to
-                                    MirrorStateEntry(
-                                        latencyMs = r.latencyMs,
-                                        lastOkAt = if (r.ok) now else prev.lastOkAt,
-                                        fails = if (r.ok) 0 else prev.fails,
-                                        ewmaBps = prev.ewmaBps,
-                                        rawOk = prev.rawOk || (r.ok && isRaw),
-                                        releaseOk = prev.releaseOk || (r.ok && !isRaw),
-                                    )
-                            ),
-                )
+            DebugLog.i("Download", "[v2] 会话首次探测全部镜像（Range 0-0，轻量）…")
+            onStage?.invoke("正在探测镜像源…")
+            val results =
+                withContext(Dispatchers.IO) {
+                    coroutineScope {
+                        mirrors.map { m -> async { m to probeLatency(m.prefix + url) } }.awaitAll()
+                    }
+                }
+            var updated = state.copy(probedAt = now)
+            // 探测 URL 的通道决定本轮记录哪个可达性位（§6.5：release/raw 分别记录）
+            results.forEach { (m, r) ->
+                val prev = updated.mirrors[m.id] ?: MirrorStateEntry()
+                updated =
+                    updated.copy(
+                        mirrors =
+                            updated.mirrors +
+                                (
+                                    m.id to
+                                        MirrorStateEntry(
+                                            latencyMs = r.latencyMs,
+                                            lastOkAt = if (r.ok) now else prev.lastOkAt,
+                                            fails = if (r.ok) 0 else prev.fails,
+                                            ewmaBps = prev.ewmaBps,
+                                            rawOk = prev.rawOk || (r.ok && isRaw),
+                                            releaseOk = prev.releaseOk || (r.ok && !isRaw),
+                                        )
+                                ),
+                    )
+            }
+            sessionState = updated
+            stateStore.save(updated)
+            orderCandidates(updated, isRaw)
         }
-        sessionState = updated
-        stateStore.save(updated)
-        return orderCandidates(updated, isRaw)
-    }
 
     /** 候选排序：曾成功优先、延迟升序；连续失败 ≥3 会话内降级；raw 通道偏好 rawOk、release 通道偏好 releaseOk（§6.5 双可达性位） */
     private fun orderCandidates(
@@ -264,6 +280,7 @@ class MirrorScheduler(
     private class SourceException(
         message: String,
         val code: Int? = null,
+        val restartRequired: Boolean = false,
     ) : IOException(message)
 
     /** 已建立连接并读到首字节的源（竞速胜者继续使用，败者取消） */
@@ -308,6 +325,8 @@ class MirrorScheduler(
                 val finished = CompletableDeferred<StreamResult>()
                 val pending = AtomicInteger(sources.size)
                 val saw404 = AtomicBoolean(false)
+                val sawNon404 = AtomicBoolean(false)
+                val sawRestartRequired = AtomicBoolean(false)
                 val failed = Collections.synchronizedSet(mutableSetOf<Mirror>())
                 val calls = Collections.synchronizedList(mutableListOf<Call>())
 
@@ -345,11 +364,13 @@ class MirrorScheduler(
                                     call.cancel()
                                 }
                             } catch (e: SourceException) {
-                                if (e.code == 404) saw404.set(true)
+                                if (e.code == 404) saw404.set(true) else sawNon404.set(true)
+                                if (e.restartRequired) sawRestartRequired.set(true)
                                 failed.add(mirror)
                                 // 源级失败（404 / HTML / Range 忽略 / 无数据 / 首字节超时）
                             } catch (e: Exception) {
-                                // 竞速败者连接被取消（IOException "Canceled"）或其它 IO 错误，忽略
+                                // 竞速败者连接被取消（IOException "Canceled"）或其它 IO 错误
+                                sawNon404.set(true)
                             } finally {
                                 conn?.close()
                             }
@@ -365,7 +386,8 @@ class MirrorScheduler(
                         finished.complete(
                             StreamResult.Aborted(
                                 reason = "所有候选源首字节均失败",
-                                code = if (saw404.get()) 404 else null,
+                                code = if (saw404.get() && !sawNon404.get()) 404 else null,
+                                restartRequired = sawRestartRequired.get(),
                             ),
                         )
                     }
@@ -405,7 +427,7 @@ class MirrorScheduler(
                 val body = resp.body ?: throw SourceException("空响应体")
                 if (resumeFrom > 0L && resp.code == 200) {
                     // 源忽略 Range 返回全量：继续追加会损坏文件，需从头重试
-                    throw SourceException("Range 被忽略", resp.code)
+                    throw SourceException("Range 被忽略", resp.code, restartRequired = true)
                 }
                 val totalKnown = (body.contentLength().takeIf { it > 0 } ?: 0L) + resumeFrom
                 val src = body.source()
@@ -489,43 +511,47 @@ class MirrorScheduler(
             }
         }
 
-    private fun recordSuccess(
+    private suspend fun recordSuccess(
         mirror: Mirror,
         isRaw: Boolean,
         startedAt: Long,
         bytes: Long,
     ) {
-        val st = sessionState ?: return
-        val prev = st.mirrors[mirror.id] ?: MirrorStateEntry()
         val now = System.currentTimeMillis()
         val elapsedMs = (now - startedAt).coerceAtLeast(1)
         val bps = bytes * 1000 / elapsedMs
-        val ewma = if (prev.ewmaBps > 0) (prev.ewmaBps * 7 + bps) / 8 else bps
-        val updated =
-            st.copy(
-                mirrors =
-                    st.mirrors +
-                        (
-                            mirror.id to
-                                prev.copy(
-                                    lastOkAt = now,
-                                    fails = 0,
-                                    ewmaBps = ewma,
-                                    rawOk = prev.rawOk || isRaw,
-                                    releaseOk = prev.releaseOk || !isRaw,
-                                )
-                        ),
-            )
-        sessionState = updated
-        stateStore.save(updated)
+        stateMutex.withLock {
+            val st = sessionState ?: return@withLock
+            val prev = st.mirrors[mirror.id] ?: MirrorStateEntry()
+            val ewma = if (prev.ewmaBps > 0) (prev.ewmaBps * 7 + bps) / 8 else bps
+            val updated =
+                st.copy(
+                    mirrors =
+                        st.mirrors +
+                            (
+                                mirror.id to
+                                    prev.copy(
+                                        lastOkAt = now,
+                                        fails = 0,
+                                        ewmaBps = ewma,
+                                        rawOk = prev.rawOk || isRaw,
+                                        releaseOk = prev.releaseOk || !isRaw,
+                                    )
+                            ),
+                )
+            sessionState = updated
+            stateStore.save(updated)
+        }
     }
 
-    private fun recordFail(mirror: Mirror) {
-        val st = sessionState ?: return
-        val prev = st.mirrors[mirror.id] ?: MirrorStateEntry()
-        val updated = st.copy(mirrors = st.mirrors + (mirror.id to prev.copy(fails = prev.fails + 1)))
-        sessionState = updated
-        stateStore.save(updated)
+    private suspend fun recordFail(mirror: Mirror) {
+        stateMutex.withLock {
+            val st = sessionState ?: return@withLock
+            val prev = st.mirrors[mirror.id] ?: MirrorStateEntry()
+            val updated = st.copy(mirrors = st.mirrors + (mirror.id to prev.copy(fails = prev.fails + 1)))
+            sessionState = updated
+            stateStore.save(updated)
+        }
     }
 
     private fun sha256(file: File): String {
